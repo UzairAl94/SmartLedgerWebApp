@@ -8,11 +8,11 @@ interface BottomNavProps {
 
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
     const tabs = [
-        { id: 'dashboard', label: 'Home', icon: Home },
-        { id: 'accounts', label: 'Accounts', icon: Wallet },
-        { id: 'transactions', label: 'History', icon: Repeat },
-        { id: 'analytics', label: 'Insights', icon: InsightsIcon },
-        { id: 'settings', label: 'Settings', icon: SettingsIcon },
+        { id: 'Home', label: 'Home', icon: Home },
+        { id: 'Accounts', label: 'Accounts', icon: Wallet },
+        { id: 'History', label: 'History', icon: Repeat },
+        { id: 'Insights', label: 'Insights', icon: InsightsIcon },
+        { id: 'Settings', label: 'Settings', icon: SettingsIcon },
     ];
 
     return (

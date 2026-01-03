@@ -3,8 +3,19 @@ import { Mic, ArrowUpRight, ArrowDownLeft, Plus } from 'lucide-react';
 import { mockAccounts, mockTransactions, mockCategories, mockSettings } from '../mock/data';
 import { formatCurrency, convertCurrency } from '../utils/format';
 
-const Dashboard: React.FC<{ onAddTx: () => void }> = ({ onAddTx }) => {
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+
+const Dashboard: React.FC<{ onAddTx: () => void; onVoiceResult: (text: string) => void }> = ({ onAddTx, onVoiceResult }) => {
+    const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition();
     const mainCurrency = mockSettings.mainCurrency;
+
+    // Monitor for transcription end
+    React.useEffect(() => {
+        if (!isListening && transcript) {
+            onVoiceResult(transcript);
+            resetTranscript();
+        }
+    }, [isListening, transcript, onVoiceResult, resetTranscript]);
 
     // Calculate Total Balance
     const totalBalance = mockAccounts.reduce((acc, account) => {
@@ -54,9 +65,12 @@ const Dashboard: React.FC<{ onAddTx: () => void }> = ({ onAddTx }) => {
                         <Plus size={24} />
                         <span>Add Transaction</span>
                     </button>
-                    <button className="flex flex-col items-center justify-center p-6 bg-slate-50 text-text-secondary border border-dashed border-slate-300 rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-transform">
-                        <Mic size={24} />
-                        <span>Voice Input</span>
+                    <button
+                        onClick={isListening ? stopListening : startListening}
+                        className={`flex flex-col items-center justify-center p-6 rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-all border border-black/5 ${isListening ? 'bg-expense text-white shadow-lg shadow-expense/20 animate-pulse' : 'bg-slate-50 text-text-secondary shadow-sm'}`}
+                    >
+                        <Mic size={24} className={isListening ? 'animate-bounce' : ''} />
+                        <span>{isListening ? 'Stop' : 'Voice Input'}</span>
                     </button>
                 </div>
             </section>
