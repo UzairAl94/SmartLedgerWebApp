@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #4f46e5;
+  --color-primary-light: #eef2ff;
+
+  --color-income: #10b981;
+  --color-income-light: #ecfdf5;
+
+  --color-expense: #f43f5e;
+  --color-expense-light: #fff1f2;
+
+  --color-warning: #f59e0b;
+  --color-warning-light: #fffbeb;
+
+  --color-bg-primary: #f8fafc;
+  --color-bg-secondary: #ffffff;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+
+  --font-inter: "Inter", system-ui, -apple-system, sans-serif;
+
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  * {
+    @apply m-0 p-0 box-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply font-inter bg-bg-primary text-text-primary antialiased;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-semibold text-text-primary;
+  }
+
+  button {
+    @apply cursor-pointer border-none bg-none font-[inherit];
+  }
+
+  input,
+  select,
+  textarea {
+    @apply font-[inherit] text-[16px];
+  }
+}
+
+/* Custom Utilities */
+@utility shadow-premium {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
