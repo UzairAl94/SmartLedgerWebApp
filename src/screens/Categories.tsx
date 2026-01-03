@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { Plus, Search } from 'lucide-react';
-import { mockCategories } from '../mock/data';
+import { Plus, Search, Trash2 } from 'lucide-react';
+import { categoryService } from '../services/categoryService';
+import type { Category, Transaction } from '../types';
 
-const Categories: React.FC = () => {
+interface CategoriesProps {
+    categories: Category[];
+    transactions: Transaction[];
+    onAddCategory: () => void;
+}
+
+const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAddCategory }) => {
     const [activeType, setActiveType] = useState<'Expense' | 'Income'>('Expense');
 
-    const filtered = mockCategories.filter(c => c.type === activeType);
+    const filtered = categories.filter((c: Category) => c.type === activeType);
+
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     return (
         <div className="flex flex-col gap-6 pb-8">
@@ -27,7 +36,10 @@ const Categories: React.FC = () => {
             <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center px-1">
                     <h3 className="text-[16px] font-bold">{activeType} Categories</h3>
-                    <button className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center active:scale-95 transition-transform">
+                    <button
+                        onClick={onAddCategory}
+                        className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center active:scale-95 transition-transform"
+                    >
                         <Plus size={18} />
                     </button>
                 </div>
@@ -45,7 +57,35 @@ const Categories: React.FC = () => {
                                 <span className="block font-semibold text-[15px]">{cat.name}</span>
                                 <span className="text-[12px] text-text-muted font-medium">Standard Category</span>
                             </div>
-                            <div className="w-8 h-8 rounded-lg bg-bg-primary border border-black/5 flex items-center justify-center text-text-muted">
+                            <button
+                                disabled={!!deletingId}
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+
+                                    // Check if category is in use
+                                    const isInUse = transactions.some(tx => tx.categoryId === cat.id);
+                                    if (isInUse) {
+                                        alert(`Cannot delete "${cat.name}" because it is being used in existing transactions. Please delete or reassing those transactions first.`);
+                                        return;
+                                    }
+
+                                    if (window.confirm(`Delete ${cat.name} category?`)) {
+                                        setDeletingId(cat.id);
+                                        try {
+                                            await categoryService.deleteCategory(cat.id);
+                                        } catch (e) {
+                                            console.error(e);
+                                            alert("Failed to delete category");
+                                        } finally {
+                                            setDeletingId(null);
+                                        }
+                                    }
+                                }}
+                                className="w-9 h-9 rounded-xl bg-bg-primary border border-black/5 flex items-center justify-center text-text-muted hover:text-expense hover:bg-expense/5 transition-all disabled:opacity-50"
+                            >
+                                {deletingId === cat.id ? <div className="w-4 h-4 border-2 border-expense/20 border-t-expense rounded-full animate-spin"></div> : <Trash2 size={16} />}
+                            </button>
+                            <div className="w-9 h-9 rounded-xl bg-bg-primary border border-black/5 flex items-center justify-center text-text-muted">
                                 <Search size={14} strokeWidth={2.5} />
                             </div>
                         </div>

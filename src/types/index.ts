@@ -13,7 +13,7 @@ export interface Account {
   icon?: string;
 }
 
-export type TransactionType = 'Income' | 'Expense';
+export type TransactionType = 'Income' | 'Expense' | 'Transfer';
 
 export interface Category {
   id: string;
@@ -27,14 +27,20 @@ export interface Transaction {
   id: string;
   amount: number;
   currency: Currency;
-  categoryId: string;
-  accountId: string;
+  categoryId?: string; // Optional for transfers
+  accountId: string; // From Account (for transfers)
+  toAccountId?: string; // To Account (for transfers)
   date: string;
   note?: string;
   type: TransactionType;
+  fee?: number;
 }
+
+export type ConversionRates = Record<string, number>;
 
 export interface UserSettings {
   mainCurrency: Currency;
   monthStartDay: number;
+  useCustomRates: boolean;
+  customRates: ConversionRates;
 }

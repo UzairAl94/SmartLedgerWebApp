@@ -1,13 +1,27 @@
 import React from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { mockCategories, mockTransactions } from '../mock/data';
-import { formatCurrency } from '../utils/format';
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import type { Transaction, Category } from '../types';
+import { formatCurrency, convertCurrency } from '../utils/format';
 
-const Analytics: React.FC = () => {
-    const categoryData = mockCategories
+interface AnalyticsProps {
+    transactions: Transaction[];
+    categories: Category[];
+}
+
+const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories }) => {
+    const mainCurrency = 'PKR'; // Default for analytics
+
+    const incomeTotal = transactions
+        .filter(t => t.type === 'Income')
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+
+    const expenseTotal = transactions
+        .filter(t => t.type === 'Expense')
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+    const categoryData = categories
         .filter(c => c.type === 'Expense')
         .map(c => {
-            const total = mockTransactions
+            const total = transactions
                 .filter(t => t.categoryId === c.id)
                 .reduce((sum, t) => sum + t.amount, 0);
             return { name: c.name, value: total, color: c.color };
@@ -15,9 +29,9 @@ const Analytics: React.FC = () => {
         .filter(d => d.value > 0);
 
     const monthlyTrend = [
-        { month: 'Oct', income: 120000, expense: 95000 },
-        { month: 'Nov', income: 140000, expense: 85000 },
-        { month: 'Dec', income: 150000, expense: 24500 },
+        { name: 'Dec', income: incomeTotal, expense: expenseTotal },
+        { name: 'Nov', income: 0, expense: 0 },
+        { name: 'Oct', income: 0, expense: 0 },
     ];
 
     return (

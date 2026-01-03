@@ -31,6 +31,17 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+
   body {
     @apply font-inter bg-bg-primary text-text-primary antialiased;
     line-height: 1.5;

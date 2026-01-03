@@ -1,13 +1,23 @@
 import React from 'react';
-import { Mic, ArrowUpRight, ArrowDownLeft, Plus } from 'lucide-react';
-import { mockAccounts, mockTransactions, mockCategories, mockSettings } from '../mock/data';
+import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2 } from 'lucide-react';
+import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
-
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import type { Account, Transaction, Category } from '../types';
 
-const Dashboard: React.FC<{ onAddTx: () => void; onVoiceResult: (text: string) => void }> = ({ onAddTx, onVoiceResult }) => {
+interface DashboardProps {
+    onAddTx: () => void;
+    onViewAll: () => void;
+    onVoiceResult: (text: string) => void;
+    accounts: Account[];
+    transactions: Transaction[];
+    categories: Category[];
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories }) => {
     const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition();
-    const mainCurrency = mockSettings.mainCurrency;
+    // Use the first account's currency or PKR as default for summary
+    const mainCurrency = accounts[0]?.currency || 'PKR';
 
     // Monitor for transcription end
     React.useEffect(() => {
@@ -18,14 +28,23 @@ const Dashboard: React.FC<{ onAddTx: () => void; onVoiceResult: (text: string) =
     }, [isListening, transcript, onVoiceResult, resetTranscript]);
 
     // Calculate Total Balance
-    const totalBalance = mockAccounts.reduce((acc, account) => {
+    const totalBalance = accounts.reduce((acc: number, account: Account) => {
         return acc + convertCurrency(account.balance, account.currency, mainCurrency);
     }, 0);
 
     // Recent Transactions
-    const recentTransactions = [...mockTransactions]
+    const recentTransactions = [...transactions]
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 4);
+
+    // Calculate Income and Expenses
+    const incomeTotal = transactions
+        .filter(t => t.type === 'Income')
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+
+    const expenseTotal = transactions
+        .filter(t => t.type === 'Expense')
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
 
     return (
         <div className="flex flex-col gap-8 pb-8">
@@ -40,7 +59,7 @@ const Dashboard: React.FC<{ onAddTx: () => void; onVoiceResult: (text: string) =
                         </div>
                         <div>
                             <span className="block text-[10px] uppercase tracking-wider opacity-70">Income</span>
-                            <strong className="text-[14px] block">{formatCurrency(150000, 'PKR')}</strong>
+                            <strong className="text-[14px] block">{formatCurrency(incomeTotal, mainCurrency)}</strong>
                         </div>
                     </div>
                     <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl flex items-center gap-2 border border-white/10">
@@ -49,7 +68,7 @@ const Dashboard: React.FC<{ onAddTx: () => void; onVoiceResult: (text: string) =
                         </div>
                         <div>
                             <span className="block text-[10px] uppercase tracking-wider opacity-70">Expenses</span>
-                            <strong className="text-[14px] block">{formatCurrency(24500, 'PKR')}</strong>
+                            <strong className="text-[14px] block">{formatCurrency(expenseTotal, mainCurrency)}</strong>
                         </div>
                     </div>
                 </div>
@@ -78,24 +97,50 @@ const Dashboard: React.FC<{ onAddTx: () => void; onVoiceResult: (text: string) =
             <section>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-base font-semibold">Recent Transactions</h3>
-                    <button className="text-[13px] font-semibold text-primary">View All</button>
+                    <button
+                        onClick={onViewAll}
+                        className="text-[13px] font-semibold text-primary active:scale-95 transition-transform px-2 py-1"
+                    >
+                        View All
+                    </button>
                 </div>
 
                 <div className="flex flex-col gap-2">
                     {recentTransactions.map(tx => {
-                        const category = mockCategories.find(c => c.id === tx.categoryId);
+                        const category = tx.categoryId ? categories.find((c: Category) => c.id === tx.categoryId) : null;
+                        const toAccount = tx.toAccountId ? accounts.find((a: Account) => a.id === tx.toAccountId) : null;
+
                         return (
                             <div key={tx.id} className="flex items-center p-4 bg-bg-secondary rounded-xl gap-4 shadow-sm">
-                                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: category?.color + '20' }}>
-                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category?.color }}></div>
+                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tx.type === 'Transfer' ? 'bg-blue-50 text-blue-600' : ''}`} style={tx.type !== 'Transfer' ? { backgroundColor: category?.color + '20' } : undefined}>
+                                    {tx.type === 'Transfer' ? (
+                                        <div className="w-5 h-5 flex items-center justify-center font-bold">→</div>
+                                    ) : (
+                                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category?.color }}></div>
+                                    )}
                                 </div>
                                 <div className="flex-1 flex flex-col">
-                                    <span className="font-semibold text-[14px]">{category?.name}</span>
+                                    <span className="font-semibold text-[14px]">
+                                        {tx.type === 'Transfer'
+                                            ? `Transfer to ${toAccount?.name || 'Unknown'}`
+                                            : category?.name || 'Uncategorized'}
+                                    </span>
                                     <span className="text-[12px] text-text-secondary">{tx.note}</span>
                                 </div>
-                                <div className={`font-bold text-[15px] ${tx.type === 'Income' ? 'text-income' : 'text-text-primary'}`}>
+                                <div className={`font-bold text-[15px] ${tx.type === 'Income' ? 'text-income' : tx.type === 'Expense' ? 'text-text-primary' : 'text-blue-600'}`}>
                                     {tx.type === 'Income' ? '+' : '-'} {formatCurrency(tx.amount, tx.currency)}
                                 </div>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm("Delete this transaction? This will automatically update your account balance.")) {
+                                            transactionService.deleteTransaction(tx);
+                                        }
+                                    }}
+                                    className="w-9 h-9 rounded-xl bg-bg-primary flex items-center justify-center text-text-muted hover:text-expense transition-all border border-black/5"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
                             </div>
                         );
                     })}

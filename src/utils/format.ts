@@ -1,5 +1,4 @@
 import type { Currency } from '../types';
-import { mockRates } from '../mock/data';
 
 export const formatCurrency = (amount: number, currency: Currency) => {
     if (currency === 'PKR') {
@@ -19,11 +18,17 @@ export const formatCurrency = (amount: number, currency: Currency) => {
     return formatter.format(amount);
 };
 
+const exchangeRates: Record<Currency, number> = {
+    'PKR': 1,
+    'AED': 75.8,
+    'USD': 278.5,
+};
+
 export const convertCurrency = (amount: number, from: Currency, to: Currency) => {
     if (from === to) return amount;
 
     // Convert from 'from' to PKR
-    const inPKR = amount * mockRates[from];
+    const inPKR = amount * exchangeRates[from];
     // Convert from PKR to 'to'
-    return inPKR / mockRates[to];
+    return inPKR / exchangeRates[to];
 };
