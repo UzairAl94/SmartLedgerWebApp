@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
-import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import type { Account, Transaction, Category } from '../types';
 
 interface DashboardProps {
@@ -15,18 +15,10 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories }) => {
-    const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition();
+    const { isRecording, isProcessing, startRecording, stopRecording } = useVoiceInput(onVoiceResult);
     const [showBalance, setShowBalance] = useState(false);
     // Use the first account's currency or PKR as default for summary
     const mainCurrency = accounts[0]?.currency || 'PKR';
-
-    // Monitor for transcription end
-    React.useEffect(() => {
-        if (!isListening && transcript) {
-            onVoiceResult(transcript);
-            resetTranscript();
-        }
-    }, [isListening, transcript, onVoiceResult, resetTranscript]);
 
     // Calculate Total Balance
     const totalBalance = accounts.reduce((acc: number, account: Account) => {
@@ -97,11 +89,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
                         <span>Add Transaction</span>
                     </button>
                     <button
-                        onClick={isListening ? stopListening : startListening}
-                        className={`flex flex-col items-center justify-center p-6 rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-all border border-black/5 ${isListening ? 'bg-expense text-white shadow-lg shadow-expense/20 animate-pulse' : 'bg-slate-50 text-text-secondary shadow-sm'}`}
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={isProcessing}
+                        className={`flex flex-col items-center justify-center p-6 rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-all border border-black/5 ${isRecording ? 'bg-expense text-white shadow-lg shadow-expense/20 animate-pulse' : isProcessing ? 'bg-bg-secondary opacity-80' : 'bg-slate-50 text-text-secondary shadow-sm'}`}
                     >
-                        <Mic size={24} className={isListening ? 'animate-bounce' : ''} />
-                        <span>{isListening ? 'Stop' : 'Voice Input'}</span>
+                        {isProcessing ? (
+                            <Loader2 size={24} className="animate-spin text-primary" />
+                        ) : (
+                            <Mic size={24} className={isRecording ? 'animate-bounce' : ''} />
+                        )}
+                        <span>{isRecording ? 'Stop' : isProcessing ? 'Processing...' : 'Voice Input'}</span>
                     </button>
                 </div>
             </section>

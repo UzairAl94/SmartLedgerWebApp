@@ -19,7 +19,9 @@ const DEFAULT_SETTINGS: UserSettings = {
         'USD': 278.50, // Default fallback
         'AED': 75.83,
         'PKR': 1
-    }
+    },
+    elevenLabsApiKey: import.meta.env.VITE_ELEVEN_LABS_API_KEY,
+    deepSeekApiKey: import.meta.env.VITE_DEEPSEEK_API_KEY,
 };
 
 export const settingsService = {

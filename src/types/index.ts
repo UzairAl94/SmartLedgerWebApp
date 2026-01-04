@@ -43,4 +43,6 @@ export interface UserSettings {
   monthStartDay: number;
   useCustomRates: boolean;
   customRates: ConversionRates;
+  elevenLabsApiKey?: string;
+  deepSeekApiKey?: string;
 }

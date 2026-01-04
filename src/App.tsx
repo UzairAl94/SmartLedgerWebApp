@@ -14,6 +14,8 @@ import { accountService } from './services/accountService';
 import { transactionService } from './services/transactionService';
 import { categoryService } from './services/categoryService';
 import { settingsService } from './services/settingsService';
+import { deepSeekService } from './services/deepSeekService';
+import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
 import { Cloud } from 'lucide-react';
 import type { Account, Transaction, Category, UserSettings } from './types';
 
@@ -21,6 +23,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('Home');
   const [isAddTxOpen, setIsAddTxOpen] = useState(false);
   const [voiceResult, setVoiceResult] = useState<string | null>(null);
+  const [isProcessingTransaction, setIsProcessingTransaction] = useState(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
 
@@ -88,6 +92,44 @@ const App: React.FC = () => {
 
   const handleVoiceResult = (text: string) => {
     setVoiceResult(text);
+    setProcessingError(null);
+  };
+
+  const handleProcessTransaction = async () => {
+    if (!voiceResult || !settings) return;
+
+    setIsProcessingTransaction(true);
+    setProcessingError(null);
+
+    try {
+      // Check for DeepSeek API key
+      if (!settings.deepSeekApiKey) {
+        throw new Error("DeepSeek API Key not configured. Please add it in Settings.");
+      }
+
+      // Parse with DeepSeek
+      const parsed = await deepSeekService.parseTransaction(voiceResult, settings.deepSeekApiKey);
+
+      // Process with Ledger Engine
+      await ledgerEngine.processTransaction(parsed, accounts, categories);
+
+      // Success!
+      setVoiceResult(null);
+      setProcessingError(null);
+      setIsSyncing(true);
+      setTimeout(() => setIsSyncing(false), 2000);
+    } catch (error) {
+      console.error("Transaction processing error:", error);
+      if (error instanceof LedgerValidationError) {
+        setProcessingError(error.message);
+      } else if (error instanceof Error) {
+        setProcessingError(error.message);
+      } else {
+        setProcessingError("Failed to process transaction. Please try again.");
+      }
+    } finally {
+      setIsProcessingTransaction(false);
+    }
   };
 
   const handleViewAccountHistory = (accountId: string) => {
@@ -195,7 +237,10 @@ const App: React.FC = () => {
 
       <BottomSheet
         isOpen={!!voiceResult}
-        onClose={() => setVoiceResult(null)}
+        onClose={() => {
+          setVoiceResult(null);
+          setProcessingError(null);
+        }}
         title="Voice Transcription"
       >
         <div className="flex flex-col gap-6 py-4">
@@ -205,15 +250,35 @@ const App: React.FC = () => {
             </p>
           </div>
 
+          {processingError && (
+            <div className="bg-expense/10 border border-expense/20 p-4 rounded-2xl">
+              <p className="text-[13px] font-semibold text-expense">{processingError}</p>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3">
-            <p className="text-[13px] text-text-muted font-medium px-1">
-              This is what I heard. In the future, I'll be able to parse this into a transaction!
-            </p>
             <button
-              onClick={() => setVoiceResult(null)}
-              className="w-full py-4 bg-primary text-white rounded-2xl font-bold text-[15px] shadow-lg shadow-primary/20 active:scale-95 transition-all"
+              onClick={handleProcessTransaction}
+              disabled={isProcessingTransaction}
+              className="w-full py-4 bg-primary text-white rounded-2xl font-bold text-[15px] shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Got it
+              {isProcessingTransaction ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  Processing...
+                </>
+              ) : (
+                'Process Transaction'
+              )}
+            </button>
+            <button
+              onClick={() => {
+                setVoiceResult(null);
+                setProcessingError(null);
+              }}
+              className="w-full py-3 bg-bg-secondary text-text-secondary rounded-2xl font-semibold text-[14px] active:scale-95 transition-all"
+            >
+              Cancel
             </button>
           </div>
         </div>
