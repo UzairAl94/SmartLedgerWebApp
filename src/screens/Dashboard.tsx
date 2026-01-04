@@ -1,5 +1,5 @@
-import React from 'react';
-import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -16,6 +16,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories }) => {
     const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition();
+    const [showBalance, setShowBalance] = useState(false);
     // Use the first account's currency or PKR as default for summary
     const mainCurrency = accounts[0]?.currency || 'PKR';
 
@@ -49,8 +50,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
     return (
         <div className="flex flex-col gap-8 pb-8">
             <section className="bg-linear-to-br from-primary to-[#312e81] p-6 rounded-[2rem] text-white flex flex-col gap-2 shadow-[0_10_25_-5_rgba(79,70,229,0.4)]">
-                <span className="text-[14px] opacity-80 font-medium tracking-wide">Total Balance</span>
-                <h2 className="text-[32px] font-bold tracking-tight mb-4">{formatCurrency(totalBalance, mainCurrency)}</h2>
+                <div className="flex justify-between items-center">
+                    <span className="text-[14px] opacity-80 font-medium tracking-wide">Total Balance</span>
+                    <button onClick={() => setShowBalance(!showBalance)} className="opacity-80 hover:opacity-100 active:scale-95 transition-all">
+                        {showBalance ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                </div>
+                <h2 className="text-[32px] font-bold tracking-tight mb-4 text-white">
+                    {showBalance ? formatCurrency(totalBalance, mainCurrency) : '••••••••'}
+                </h2>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl flex items-center gap-2 border border-white/10">
@@ -59,7 +67,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
                         </div>
                         <div>
                             <span className="block text-[10px] uppercase tracking-wider opacity-70">Income</span>
-                            <strong className="text-[14px] block">{formatCurrency(incomeTotal, mainCurrency)}</strong>
+                            <strong className="text-[14px] block">
+                                {formatCurrency(incomeTotal, mainCurrency)}
+                            </strong>
                         </div>
                     </div>
                     <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl flex items-center gap-2 border border-white/10">
@@ -68,7 +78,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
                         </div>
                         <div>
                             <span className="block text-[10px] uppercase tracking-wider opacity-70">Expenses</span>
-                            <strong className="text-[14px] block">{formatCurrency(expenseTotal, mainCurrency)}</strong>
+                            <strong className="text-[14px] block">
+                                {formatCurrency(expenseTotal, mainCurrency)}
+                            </strong>
                         </div>
                     </div>
                 </div>

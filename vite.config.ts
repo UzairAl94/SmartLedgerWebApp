@@ -13,6 +13,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      manifestFilename: 'manifest.json',
       manifest: {
         name: 'Smart Ledger',
         short_name: 'SmartLedger',
@@ -24,26 +25,20 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'vite.svg',
-            sizes: '64x64 32x32 24x24 16x16',
-            type: 'image/svg+xml'
-          },
-          {
-            src: 'vite.svg',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png'
           },
           {
-            src: 'vite.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any'
+            type: 'image/png'
           },
           {
-            src: 'vite.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'maskable'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }

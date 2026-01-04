@@ -71,7 +71,7 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
             <header className="flex flex-col gap-4 bg-bg-primary sticky top-0 z-10 pt-2 pb-2">
                 <div className="flex gap-2 items-center overflow-x-auto pb-1 scrollbar-none">
                     {/* Account Filter Dropdown */}
-                    <div className="relative group shrink-0">
+                    <div className="relative group shrink-0 p-1">
                         <select
                             value={accountFilter || ''}
                             onChange={(e) => setAccountFilter?.(e.target.value || null)}
@@ -86,7 +86,7 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
                     </div>
 
                     {/* Date Range Dropdown */}
-                    <div className="relative group shrink-0">
+                    <div className="relative group shrink-0 p-1">
                         <select
                             value={dateRange}
                             onChange={(e) => setDateRange(e.target.value as DateRange)}
