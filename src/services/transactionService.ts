@@ -1,138 +1,129 @@
-import {
-    collection,
-    runTransaction,
-    doc,
-    onSnapshot,
-    query,
-    orderBy,
-    limit
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { sqliteService } from './sqliteService';
+import { accountService } from './accountService';
+import { convertCurrency } from '../utils/format';
 import type { Transaction, Account } from '../types';
 
-const TRANSACTIONS_COLLECTION = 'transactions';
-const ACCOUNTS_COLLECTION = 'accounts';
+type Listener = (transactions: Transaction[]) => void;
 
-export const transactionService = {
+class TransactionService {
+    private listeners: Listener[] = [];
+
     // Subscribe to transactions
-    subscribeToTransactions: (onUpdate: (transactions: Transaction[]) => void, maxLimit = 50) => {
-        const q = query(
-            collection(db, TRANSACTIONS_COLLECTION),
-            orderBy('date', 'desc'),
-            limit(maxLimit)
+    subscribeToTransactions(onUpdate: Listener, maxLimit = 50) {
+        this.listeners.push(onUpdate);
+        this.fetchAndNotify(maxLimit); // Initial fetch
+
+        return () => {
+            this.listeners = this.listeners.filter(l => l !== onUpdate);
+        };
+    }
+
+    private async fetchAndNotify(maxLimit = 50) {
+        try {
+            const transactions = await this.getRecentTransactions(maxLimit);
+            this.listeners.forEach(listener => listener(transactions));
+        } catch (error) {
+            console.error('Error fetching and notifying transactions:', error);
+        }
+    }
+
+    async getRecentTransactions(limit = 50): Promise<Transaction[]> {
+        const result = await sqliteService.query(
+            'SELECT * FROM transactions ORDER BY date DESC LIMIT ?',
+            [limit]
         );
-        return onSnapshot(q, (snapshot) => {
-            const transactions = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Transaction[];
-            onUpdate(transactions);
-        });
-    },
+        return (result.values || []) as Transaction[];
+    }
 
     // Add transaction and update account balance atomically
-    createTransaction: async (tx: Omit<Transaction, 'id'>) => {
-        const accountRef = doc(db, ACCOUNTS_COLLECTION, tx.accountId);
-        const toAccountRef = tx.type === 'Transfer' && tx.toAccountId
-            ? doc(db, ACCOUNTS_COLLECTION, tx.toAccountId)
-            : null;
+    async createTransaction(tx: Omit<Transaction, 'id'>) {
+        const id = crypto.randomUUID();
 
-        return runTransaction(db, async (firestoreTransaction) => {
-            const accountDoc = await firestoreTransaction.get(accountRef);
-            if (!accountDoc.exists()) {
+        await sqliteService.transaction(async (db) => {
+            const accountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.accountId]);
+            if (!accountResult.values || accountResult.values.length === 0) {
                 throw new Error("Source account does not exist!");
             }
+            const accountData = accountResult.values[0] as Account;
 
-            const accountData = accountDoc.data() as Account;
-            const fee = tx.fee || 0;
+            // Convert transaction amount to account currency for balance update
+            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency);
+            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency) : 0;
 
-            // Calculate new balance for source account
-            // Income: +amount - fee
-            // Expense: -amount - fee
-            // Transfer: -amount - fee
             let newBalance = accountData.balance;
-
             if (tx.type === 'Income') {
-                newBalance = accountData.balance + tx.amount - fee;
+                newBalance = accountData.balance + amountInAccountCurrency - feeInAccountCurrency;
             } else {
-                // Expense or Transfer
-                newBalance = accountData.balance - tx.amount - fee;
+                newBalance = accountData.balance - amountInAccountCurrency - feeInAccountCurrency;
             }
 
             // Create the transaction record
-            const txRef = doc(collection(db, TRANSACTIONS_COLLECTION));
-            firestoreTransaction.set(txRef, tx);
+            await db.run(
+                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null]
+            );
 
-            // Update the source account balance
-            firestoreTransaction.update(accountRef, { balance: newBalance });
+            // Update source account balance
+            await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newBalance, tx.accountId]);
 
             // Handle Transfer destination account
-            if (tx.type === 'Transfer' && toAccountRef) {
-                const toAccountDoc = await firestoreTransaction.get(toAccountRef);
-                if (!toAccountDoc.exists()) {
+            if (tx.type === 'Transfer' && tx.toAccountId) {
+                const toAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.toAccountId]);
+                if (!toAccountResult.values || toAccountResult.values.length === 0) {
                     throw new Error("Destination account does not exist!");
                 }
-                const toAccountData = toAccountDoc.data() as Account;
-
-                // For Transfer, we ADD amount to destination (Fees are paid by sender)
-                const newToBalance = toAccountData.balance + tx.amount;
-                firestoreTransaction.update(toAccountRef, { balance: newToBalance });
+                const toAccountData = toAccountResult.values[0] as Account;
+                const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency);
+                const newToBalance = toAccountData.balance + amountInToAccountCurrency;
+                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, tx.toAccountId]);
             }
-
-            return txRef.id;
         });
-    },
+
+        await this.fetchAndNotify();
+        await (accountService as any).fetchAndNotify(); // Refresh accounts too
+        return id;
+    }
 
     // Delete transaction and revert account balance atomically
-    deleteTransaction: async (tx: Transaction) => {
-        const accountRef = doc(db, ACCOUNTS_COLLECTION, tx.accountId);
-        const toAccountRef = tx.type === 'Transfer' && tx.toAccountId
-            ? doc(db, ACCOUNTS_COLLECTION, tx.toAccountId)
-            : null;
-        const txRef = doc(db, TRANSACTIONS_COLLECTION, tx.id);
-
-        return runTransaction(db, async (firestoreTransaction) => {
-            const accountDoc = await firestoreTransaction.get(accountRef);
-            if (!accountDoc.exists()) {
+    async deleteTransaction(tx: Transaction) {
+        await sqliteService.transaction(async (db) => {
+            const accountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.accountId]);
+            if (!accountResult.values || accountResult.values.length === 0) {
                 throw new Error("Source account does not exist!");
             }
+            const accountData = accountResult.values[0] as Account;
 
-            const accountData = accountDoc.data() as Account;
-            const fee = tx.fee || 0;
+            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency);
+            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency) : 0;
 
-            // Revert balance for source account
             let newBalance = accountData.balance;
-
             if (tx.type === 'Income') {
-                // Revert Income: -amount + fee (Wait, fee was deducted, so we add it back? Yes. Amount was added, so subtract it.)
-                // Original: balance + amount - fee
-                // Revert: balance - amount + fee
-                newBalance = accountData.balance - tx.amount + fee;
+                newBalance = accountData.balance - amountInAccountCurrency + feeInAccountCurrency;
             } else {
-                // Revert Expense/Transfer: +amount + fee
-                // Original: balance - amount - fee
-                // Revert: balance + amount + fee
-                newBalance = accountData.balance + tx.amount + fee;
+                newBalance = accountData.balance + amountInAccountCurrency + feeInAccountCurrency;
             }
 
             // Delete the transaction record
-            firestoreTransaction.delete(txRef);
+            await db.run('DELETE FROM transactions WHERE id = ?', [tx.id]);
 
             // Update the source account balance
-            firestoreTransaction.update(accountRef, { balance: newBalance });
+            await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newBalance, tx.accountId]);
 
             // Handle Transfer destination account revert
-            if (tx.type === 'Transfer' && toAccountRef) {
-                const toAccountDoc = await firestoreTransaction.get(toAccountRef);
-                if (!toAccountDoc.exists()) {
-                    throw new Error("Destination account does not exist!");
+            if (tx.type === 'Transfer' && tx.toAccountId) {
+                const toAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.toAccountId]);
+                if (toAccountResult.values && toAccountResult.values.length > 0) {
+                    const toAccountData = toAccountResult.values[0] as Account;
+                    const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency);
+                    const newToBalance = toAccountData.balance - amountInToAccountCurrency;
+                    await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, tx.toAccountId]);
                 }
-                const toAccountData = toAccountDoc.data() as Account;
-
-                // Revert Transfer destination: -amount
-                const newToBalance = toAccountData.balance - tx.amount;
-                firestoreTransaction.update(toAccountRef, { balance: newToBalance });
             }
         });
+
+        await this.fetchAndNotify();
+        await (accountService as any).fetchAndNotify(); // Refresh accounts too
     }
-};
+}
+
+export const transactionService = new TransactionService();

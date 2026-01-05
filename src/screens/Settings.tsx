@@ -90,6 +90,7 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                             <option value="PKR">PKR (Rs)</option>
                             <option value="USD">USD ($)</option>
                             <option value="AED">AED (Dh)</option>
+                            <option value="MYR">MYR (RM)</option>
                         </select>
                     </div>
                     <div className="flex items-center justify-between p-4 border-b border-black/5 last:border-0 hover:bg-slate-50 transition-colors">
@@ -149,6 +150,19 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                                             onChange={(e) => handleRateChange('AED', e.target.value)}
                                             className="w-full text-[13px] font-bold text-right outline-none"
                                             placeholder="75.8"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[13px] font-medium text-text-muted">1 MYR = ? PKR</span>
+                                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-black/5 shadow-sm w-32 focus-within:ring-2 ring-primary/20 transition-all">
+                                        <span className="text-[12px] font-bold text-text-muted">Rs.</span>
+                                        <input
+                                            type="number"
+                                            value={settings.customRates?.['MYR'] || ''}
+                                            onChange={(e) => handleRateChange('MYR', e.target.value)}
+                                            className="w-full text-[13px] font-bold text-right outline-none"
+                                            placeholder="62.0"
                                         />
                                     </div>
                                 </div>

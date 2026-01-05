@@ -16,7 +16,8 @@ import { categoryService } from './services/categoryService';
 import { settingsService } from './services/settingsService';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
-import { Cloud } from 'lucide-react';
+import { sqliteService } from './services/sqliteService';
+import { Cloud, Loader2 } from 'lucide-react';
 import type { Account, Transaction, Category, UserSettings } from './types';
 
 const App: React.FC = () => {
@@ -34,12 +35,29 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isDbReady, setIsDbReady] = useState(false);
 
   // Navigation State
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
 
+  // Database Initialization
   useEffect(() => {
+    const initDb = async () => {
+      try {
+        console.log('Initializing database from App...');
+        await sqliteService.initialize();
+        console.log('Database initialized successfully from App');
+        setIsDbReady(true);
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+      }
+    };
+    initDb();
+  }, []);
+
+  useEffect(() => {
+    if (!isDbReady) return;
+
     let accountsLoaded = false;
     let transactionsLoaded = false;
     let categoriesLoaded = false;
@@ -51,35 +69,27 @@ const App: React.FC = () => {
       }
     };
 
-    // Subscribe to all collections
+    // Subscribe to all services
     const unsubAccounts = accountService.subscribeToAccounts((data) => {
       setAccounts(data);
       accountsLoaded = true;
       checkLoading();
-      setIsSyncing(true);
-      setTimeout(() => setIsSyncing(false), 2000);
     });
     const unsubTransactions = transactionService.subscribeToTransactions((data) => {
       setTransactions(data);
       transactionsLoaded = true;
       checkLoading();
-      setIsSyncing(true);
-      setTimeout(() => setIsSyncing(false), 2000);
     });
     const unsubCategories = categoryService.subscribeToCategories((data) => {
       setCategories(data);
       categoriesLoaded = true;
       checkLoading();
-      setIsSyncing(true);
-      setTimeout(() => setIsSyncing(false), 2000);
     });
 
     const unsubSettings = settingsService.subscribeToSettings((data) => {
       setSettings(data);
       settingsLoaded = true;
       checkLoading();
-      setIsSyncing(true);
-      setTimeout(() => setIsSyncing(false), 2000);
     });
 
     return () => {
@@ -88,7 +98,7 @@ const App: React.FC = () => {
       unsubCategories();
       unsubSettings();
     };
-  }, []);
+  }, [isDbReady]);
 
   const handleVoiceResult = (text: string) => {
     setVoiceResult(text);
@@ -116,8 +126,6 @@ const App: React.FC = () => {
       // Success!
       setVoiceResult(null);
       setProcessingError(null);
-      setIsSyncing(true);
-      setTimeout(() => setIsSyncing(false), 2000);
     } catch (error) {
       console.error("Transaction processing error:", error);
       if (error instanceof LedgerValidationError) {
@@ -148,6 +156,7 @@ const App: React.FC = () => {
             accounts={accounts}
             transactions={transactions}
             categories={categories}
+            settings={settings}
           />
         );
       case 'Accounts':
@@ -158,6 +167,7 @@ const App: React.FC = () => {
             categories={categories}
             onAddAccount={() => setIsAddAccountOpen(true)}
             onViewHistory={handleViewAccountHistory}
+            settings={settings}
           />
         );
       case 'History':
@@ -168,10 +178,11 @@ const App: React.FC = () => {
             accounts={accounts}
             accountFilter={accountFilter}
             setAccountFilter={setAccountFilter}
+            settings={settings}
           />
         );
       case 'Insights':
-        return <Analytics transactions={transactions} categories={categories} />;
+        return <Analytics transactions={transactions} categories={categories} settings={settings} />;
       case 'Settings':
         return <Settings onNavigateCategories={() => setActiveTab('Categories')} settings={settings} />;
       case 'Categories':
@@ -191,18 +202,19 @@ const App: React.FC = () => {
             accounts={accounts}
             transactions={transactions}
             categories={categories}
+            settings={settings}
           />
         );
     }
   };
 
-  if (isLoading) {
+  if (isLoading || !isDbReady) {
     return (
       <div className="h-[100dvh] w-full bg-bg-primary flex flex-col items-center justify-center p-8 gap-6">
-        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+        <Loader2 className="animate-spin text-primary" size={48} />
         <div className="text-center">
           <h2 className="text-xl font-bold mb-2">Smart Ledger</h2>
-          <p className="text-text-muted text-[14px]">Syncing with your cloud database...</p>
+          <p className="text-text-muted text-[14px]">Initializing local database...</p>
         </div>
       </div>
     );
@@ -215,9 +227,9 @@ const App: React.FC = () => {
         setActiveTab={setActiveTab}
       >
         <div className="flex items-center gap-2 mb-2 px-1">
-          <Cloud size={12} className={`text-income ${isSyncing ? 'animate-bounce' : 'animate-pulse'}`} />
+          <Cloud size={12} className="text-primary" />
           <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">
-            {isSyncing ? 'Syncing...' : 'Live Sync Enabled'}
+            Local Storage Mode
           </span>
         </div>
         {renderScreen()}

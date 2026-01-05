@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Banknote, Trash2 } from 'lucide-react';
 import { accountService } from '../services/accountService';
 import { formatCurrency, convertCurrency } from '../utils/format';
-import type { Account, Transaction, Category } from '../types';
+import type { Account, Transaction, Category, UserSettings } from '../types';
 import BottomSheet from '../components/ui/BottomSheet';
 
 interface AccountsProps {
@@ -11,11 +11,12 @@ interface AccountsProps {
     categories: Category[];
     onAddAccount: () => void;
     onViewHistory: (accountId: string) => void;
+    settings: UserSettings | null;
 }
 
-const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories, onAddAccount, onViewHistory }) => {
+const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories, onAddAccount, onViewHistory, settings }) => {
     const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-    const mainCurrency = accounts[0]?.currency || 'PKR';
+    const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // Calculate Net Worth
     const netWorth = accounts.reduce((sum: number, acc: Account) => sum + convertCurrency(acc.balance, acc.currency, mainCurrency), 0);

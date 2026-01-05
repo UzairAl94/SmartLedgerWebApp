@@ -3,7 +3,7 @@ import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Eye, EyeOff, Loader2 } 
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { useVoiceInput } from '../hooks/useVoiceInput';
-import type { Account, Transaction, Category } from '../types';
+import type { Account, Transaction, Category, UserSettings } from '../types';
 
 interface DashboardProps {
     onAddTx: () => void;
@@ -12,13 +12,14 @@ interface DashboardProps {
     accounts: Account[];
     transactions: Transaction[];
     categories: Category[];
+    settings: UserSettings | null;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
     const { isRecording, isProcessing, startRecording, stopRecording } = useVoiceInput(onVoiceResult);
     const [showBalance, setShowBalance] = useState(false);
-    // Use the first account's currency or PKR as default for summary
-    const mainCurrency = accounts[0]?.currency || 'PKR';
+    // Use the main currency from settings
+    const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // Calculate Total Balance
     const totalBalance = accounts.reduce((acc: number, account: Account) => {

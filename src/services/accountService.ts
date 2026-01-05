@@ -1,45 +1,66 @@
-import {
-    collection,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc,
-    onSnapshot,
-    query,
-    orderBy
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { sqliteService } from './sqliteService';
 import type { Account } from '../types';
 
-const COLLECTION_NAME = 'accounts';
+type Listener = (accounts: Account[]) => void;
 
-export const accountService = {
+class AccountService {
+    private listeners: Listener[] = [];
+
     // Subscribe to accounts changes
-    subscribeToAccounts: (onUpdate: (accounts: Account[]) => void) => {
-        const q = query(collection(db, COLLECTION_NAME), orderBy('name'));
-        return onSnapshot(q, (snapshot) => {
-            const accounts = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Account[];
-            onUpdate(accounts);
-        });
-    },
+    subscribeToAccounts(onUpdate: Listener) {
+        this.listeners.push(onUpdate);
+        this.fetchAndNotify(); // Initial fetch
+
+        return () => {
+            this.listeners = this.listeners.filter(l => l !== onUpdate);
+        };
+    }
+
+    private async fetchAndNotify() {
+        try {
+            const accounts = await this.getAllAccounts();
+            this.listeners.forEach(listener => listener(accounts));
+        } catch (error) {
+            console.error('Error fetching and notifying accounts:', error);
+        }
+    }
+
+    async getAllAccounts(): Promise<Account[]> {
+        const result = await sqliteService.query('SELECT * FROM accounts ORDER BY name ASC');
+        return (result.values || []) as Account[];
+    }
 
     // Add a new account
-    addAccount: async (account: Omit<Account, 'id'>) => {
-        return addDoc(collection(db, COLLECTION_NAME), account);
-    },
+    async addAccount(account: Omit<Account, 'id'>) {
+        const id = crypto.randomUUID();
+        await sqliteService.execute(
+            'INSERT INTO accounts (id, name, type, currency, balance, initialBalance, color, icon) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, account.name, account.type, account.currency, account.balance, account.initialBalance, account.color, account.icon]
+        );
+        await this.fetchAndNotify();
+        return id;
+    }
 
     // Update an existing account
-    updateAccount: async (id: string, updates: Partial<Account>) => {
-        const accountRef = doc(db, COLLECTION_NAME, id);
-        return updateDoc(accountRef, updates);
-    },
+    async updateAccount(id: string, updates: Partial<Account>) {
+        const fields = Object.keys(updates);
+        if (fields.length === 0) return;
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = Object.values(updates);
+
+        await sqliteService.execute(
+            `UPDATE accounts SET ${setClause} WHERE id = ?`,
+            [...values, id]
+        );
+        await this.fetchAndNotify();
+    }
 
     // Delete an account
-    deleteAccount: async (id: string) => {
-        const accountRef = doc(db, COLLECTION_NAME, id);
-        return deleteDoc(accountRef);
+    async deleteAccount(id: string) {
+        await sqliteService.execute('DELETE FROM accounts WHERE id = ?', [id]);
+        await this.fetchAndNotify();
     }
-};
+}
+
+export const accountService = new AccountService();

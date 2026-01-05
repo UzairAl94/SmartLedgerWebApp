@@ -10,11 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^7.0.2",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "@tailwindcss/vite": "^4.1.18",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
-    "firebase": "^12.7.0",
     "framer-motion": "^12.23.26",
+    "localforage": "^1.10.0",
     "lucide-react": "^0.562.0",
     "openai": "^6.15.0",
     "react": "^19.2.0",
@@ -27,7 +31,6 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-basic-ssl": "^2.1.0",
     "@vitejs/plugin-react": "^5.1.1",
     "elevenlabs": "^1.59.0",
     "eslint": "^9.39.1",
@@ -38,5 +41,10 @@
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
     "vite-plugin-pwa": "^1.2.0"
+  },
+  "overrides": {
+    "jeep-sqlite": {
+      "sql.js": "1.13.0"
+    }
   }
 }

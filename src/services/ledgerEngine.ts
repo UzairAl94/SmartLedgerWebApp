@@ -69,7 +69,7 @@ export const ledgerEngine = {
         const transaction: Omit<Transaction, 'id'> = {
             type: parsed.type === 'income' ? 'Income' : 'Expense',
             amount: parsed.amount!,
-            currency: account.currency,
+            currency: parsed.currency || 'PKR', // Use parsed currency or default to PKR
             accountId: account.id,
             categoryId: category.id,
             date: new Date().toISOString(),
@@ -112,7 +112,7 @@ export const ledgerEngine = {
         const transaction: Omit<Transaction, 'id'> = {
             type: 'Transfer',
             amount: parsed.amount!,
-            currency: fromAccount.currency,
+            currency: parsed.currency || 'PKR', // Use parsed currency or default to PKR
             accountId: fromAccount.id,
             toAccountId: toAccount.id,
             date: new Date().toISOString(),

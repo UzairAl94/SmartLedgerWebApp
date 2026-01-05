@@ -22,6 +22,7 @@ const exchangeRates: Record<Currency, number> = {
     'PKR': 1,
     'AED': 75.8,
     'USD': 278.5,
+    'MYR': 62.0, // Malaysian Ringgit
 };
 
 export const convertCurrency = (amount: number, from: Currency, to: Currency) => {

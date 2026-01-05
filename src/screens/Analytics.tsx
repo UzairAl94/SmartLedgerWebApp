@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronDown } from 'lucide-react';
-import type { Transaction, Category } from '../types';
+import type { Transaction, Category, UserSettings } from '../types';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import {
     subDays,
@@ -25,13 +25,14 @@ import {
 interface AnalyticsProps {
     transactions: Transaction[];
     categories: Category[];
+    settings: UserSettings | null;
 }
 
 type DateRange = '7days' | '30days' | 'thisMonth' | 'lastMonth' | '6Months' | 'Year';
 
-const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories }) => {
+const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories, settings }) => {
     const [dateRange, setDateRange] = useState<DateRange>('7days');
-    const mainCurrency = 'PKR';
+    const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // 1. Determine Date Range Metadata
     const { startDate, endDate, periodType } = useMemo(() => {

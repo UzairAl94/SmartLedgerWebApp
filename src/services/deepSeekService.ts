@@ -3,6 +3,7 @@ import OpenAI from "openai";
 export interface ParsedTransaction {
     type: 'income' | 'expense' | 'transfer' | null;
     amount: number | null;
+    currency: 'PKR' | 'USD' | 'AED' | 'MYR' | null;
     category: string | null;
     account: string | null;
     fromAccount: string | null;
@@ -23,19 +24,28 @@ Rules:
 - Amount must be a NUMBER (not string)
 - Normalize large numbers (e.g. "25 thousand" → 25000)
 - Allowed transaction types: income, expense, transfer
+- Allowed currencies: PKR, USD, AED, MYR (default: PKR if not mentioned)
+- Detect currency from keywords: "dollars"/"usd" → USD, "dirhams"/"aed" → AED, "rupees"/"pkr" → PKR, "ringgit"/"myr" → MYR
 - Categories must be short lowercase nouns
 - Account names must be lowercase
 - Notes are free-form text (string or null)
 - Never guess missing values
 
 JSON fields:
-- type
-- amount
-- category
-- account
-- fromAccount
-- toAccount
-- note
+- type (income/expense/transfer)
+- amount (number)
+- currency (PKR/USD/AED/MYR, default PKR)
+- category (lowercase string)
+- account (lowercase string)
+- fromAccount (for transfers, lowercase string)
+- toAccount (for transfers, lowercase string)
+- note (string or null)
+
+Examples:
+"spent 500 dollars on groceries" → currency: "USD"
+"received 1000 dirhams salary" → currency: "AED"
+"paid 2500 for rent" → currency: "PKR" (default)
+"spent 200 ringgit on shopping" → currency: "MYR"
 `;
 
 export const deepSeekService = {

@@ -72,6 +72,10 @@
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
+@utility safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 @utility safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, Trash2, ChevronDown, Calendar, Filter } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
-import type { Transaction, Category, Account } from '../types';
+import type { Transaction, Category, Account, UserSettings } from '../types';
 import { isToday, isYesterday, format, subDays, isAfter, parseISO } from 'date-fns';
 
 interface TransactionsProps {
@@ -11,16 +11,17 @@ interface TransactionsProps {
     accounts: Account[];
     accountFilter?: string | null;
     setAccountFilter?: (id: string | null) => void;
+    settings: UserSettings | null;
 }
 
 type DateRange = '7days' | '30days' | 'all';
 
-const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, accounts, accountFilter, setAccountFilter }) => {
+const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, accounts, accountFilter, setAccountFilter, settings }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense' | 'Transfer'>('All');
     const [dateRange, setDateRange] = useState<DateRange>('7days');
     const [deletingId, setDeletingId] = useState<string | null>(null);
-    const mainCurrency = 'PKR';
+    const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // 1. Filter by Date Range
     const dateFilteredTransactions = transactions.filter(t => {
@@ -172,7 +173,11 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
                                                     <span className="text-[11px] text-text-muted font-medium bg-black/5 px-1.5 py-0.5 rounded-md">
                                                         {account?.name || 'Unknown'}
                                                     </span>
-                                                    {tx.fee ? <span className="text-[10px] text-expense font-bold">Fee: {formatCurrency(tx.fee, tx.currency)}</span> : null}
+                                                    {tx.fee ? (
+                                                        <span className="text-[10px] text-expense font-bold">
+                                                            Fee: {formatCurrency(tx.fee, tx.currency)}
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                             </div>
                                             <div className={`font-bold text-[15px] ${tx.type === 'Income' ? 'text-income' : tx.type === 'Expense' ? 'text-text-primary' : 'text-blue-600'}`}>

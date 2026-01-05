@@ -1,4 +1,4 @@
-export type Currency = 'PKR' | 'AED' | 'USD';
+export type Currency = 'PKR' | 'AED' | 'USD' | 'MYR';
 
 export type AccountType = 'Bank' | 'Cash' | 'Investment';
 

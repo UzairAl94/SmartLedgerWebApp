@@ -38,7 +38,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, title, child
                                 <X size={20} />
                             </button>
                         </div>
-                        <div className="px-6 pb-12 overflow-y-auto">
+                        <div className="px-6 pb-12 safe-bottom overflow-y-auto">
                             {children}
                         </div>
                     </motion.div>

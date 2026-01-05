@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Smart Ledger</string>
+    <string name="title_activity_main">Smart Ledger</string>
+    <string name="package_name">com.uzairalam.smartledger</string>
+    <string name="custom_url_scheme">com.uzairalam.smartledger</string>
+</resources>

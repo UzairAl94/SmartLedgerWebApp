@@ -1,65 +1,73 @@
-import {
-    doc,
-    onSnapshot,
-    setDoc,
-    getDoc
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { sqliteService } from './sqliteService';
 import type { UserSettings } from '../types';
 
-const COLLECTION_NAME = 'settings';
-// Single user app for now, so we use a constant ID or a known document
-const SETTINGS_DOC_ID = 'user_preferences';
+type Listener = (settings: UserSettings) => void;
+
+const SETTINGS_KEY = 'user_preferences';
 
 const DEFAULT_SETTINGS: UserSettings = {
     mainCurrency: 'PKR',
     monthStartDay: 1,
     useCustomRates: false,
     customRates: {
-        'USD': 278.50, // Default fallback
+        'USD': 278.50,
         'AED': 75.83,
+        'MYR': 62.0,
         'PKR': 1
     },
     elevenLabsApiKey: import.meta.env.VITE_ELEVEN_LABS_API_KEY,
     deepSeekApiKey: import.meta.env.VITE_DEEPSEEK_API_KEY,
 };
 
-export const settingsService = {
+class SettingsService {
+    private listeners: Listener[] = [];
+
     // Subscribe to settings changes
-    subscribeToSettings: (onUpdate: (settings: UserSettings) => void) => {
-        const docRef = doc(db, COLLECTION_NAME, SETTINGS_DOC_ID);
+    subscribeToSettings(onUpdate: Listener) {
+        this.listeners.push(onUpdate);
+        this.fetchAndNotify(); // Initial fetch
 
-        return onSnapshot(docRef, async (docSnapshot) => {
-            if (docSnapshot.exists()) {
-                onUpdate({ ...DEFAULT_SETTINGS, ...docSnapshot.data() } as UserSettings);
-            } else {
-                // Initialize default settings if they don't exist
-                await setDoc(docRef, DEFAULT_SETTINGS);
-                onUpdate(DEFAULT_SETTINGS);
-            }
-        });
-    },
+        return () => {
+            this.listeners = this.listeners.filter(l => l !== onUpdate);
+        };
+    }
 
-    // Update settings
-    updateSettings: async (updates: Partial<UserSettings>) => {
-        const docRef = doc(db, COLLECTION_NAME, SETTINGS_DOC_ID);
-        // Ensure document exists before updating, or use set with merge
-        // For simplicity with Partial updates on potentially missing doc, we can check or use set with merge:
-        // But since we subscribe first, it should exist. Let's use set with merge for safety on 'update' if strictly needed, 
-        // but updateDoc is cleaner if we know it exists. The subscription creates it.
-        // Let's use setDoc with merge to be safe and simple.
-        return setDoc(docRef, updates, { merge: true });
-    },
-
-    // Get current settings once (promise based)
-    getSettings: async (): Promise<UserSettings> => {
-        const docRef = doc(db, COLLECTION_NAME, SETTINGS_DOC_ID);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            return { ...DEFAULT_SETTINGS, ...docSnap.data() } as UserSettings;
-        } else {
-            return DEFAULT_SETTINGS;
+    private async fetchAndNotify() {
+        try {
+            const settings = await this.getSettings();
+            this.listeners.forEach(listener => listener(settings));
+        } catch (error) {
+            console.error('Error fetching and notifying settings:', error);
         }
     }
-};
+
+    // Get settings
+    async getSettings(): Promise<UserSettings> {
+        const result = await sqliteService.query('SELECT value FROM settings WHERE key = ?', [SETTINGS_KEY]);
+        if (result.values && result.values.length > 0) {
+            try {
+                const storedSettings = JSON.parse(result.values[0].value);
+                return { ...DEFAULT_SETTINGS, ...storedSettings };
+            } catch (e) {
+                console.error('Error parsing stored settings, using defaults', e);
+                return DEFAULT_SETTINGS;
+            }
+        }
+        return DEFAULT_SETTINGS;
+    }
+
+    // Update settings
+    async updateSettings(updates: Partial<UserSettings>) {
+        const current = await this.getSettings();
+        const updated = { ...current, ...updates };
+        const value = JSON.stringify(updated);
+
+        await sqliteService.execute(
+            'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+            [SETTINGS_KEY, value]
+        );
+        await this.fetchAndNotify();
+    }
+}
+
+export const settingsService = new SettingsService();

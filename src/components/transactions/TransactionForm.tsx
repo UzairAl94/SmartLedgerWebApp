@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { transactionService } from '../../services/transactionService';
-import type { TransactionType, Category, Account } from '../../types';
+import type { TransactionType, Category, Account, Currency } from '../../types';
 
 interface TransactionFormProps {
     onSuccess: () => void;
@@ -18,10 +18,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
     const [toAccountId, setToAccountId] = useState('');
     const [fee, setFee] = useState('');
     const [showFee, setShowFee] = useState(false);
+    const [currency, setCurrency] = useState<Currency>('PKR');
 
     // Set defaults when counts or categories change
     React.useEffect(() => {
-        if (!accountId && accounts.length > 0) setAccountId(accounts[0].id);
+        if (!accountId && accounts.length > 0) {
+            setAccountId(accounts[0].id);
+            setCurrency(accounts[0].currency); // Set currency from first account
+        }
 
         // For transfer, default "to account" to the second account if available
         if (accounts.length > 1 && !toAccountId) {
@@ -33,6 +37,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
         if (!categoryId && firstCat) setCategoryId(firstCat.id);
     }, [accounts, categories, type, accountId]);
 
+    // Update currency when account changes
+    const lastAccountId = React.useRef(accountId);
+    React.useEffect(() => {
+        if (accountId !== lastAccountId.current) {
+            const selectedAccount = accounts.find(a => a.id === accountId);
+            if (selectedAccount) {
+                setCurrency(selectedAccount.currency);
+            }
+            lastAccountId.current = accountId;
+        }
+    }, [accountId, accounts]);
+
     const handleSave = async () => {
         if (!amount || !accountId) return;
         if (type === 'Transfer' && !toAccountId) return;
@@ -42,7 +58,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
         try {
             const txData: any = {
                 amount: parseFloat(amount),
-                currency: accounts.find(a => a.id === accountId)?.currency || 'PKR',
+                currency: currency, // Use selected currency
                 accountId,
                 date: new Date().toISOString(),
                 note,
@@ -66,6 +82,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
             alert("Failed to save transaction. Check console.");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const getCurrencySymbol = (curr: string) => {
+        switch (curr) {
+            case 'USD': return '$';
+            case 'AED': return 'Dh';
+            case 'MYR': return 'RM';
+            case 'PKR': return 'Rs';
+            default: return curr;
         }
     };
 
@@ -93,9 +119,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
             </div>
 
             <div className="flex flex-col gap-2">
-                <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest px-1">Amount</label>
+                <div className="flex justify-between items-center px-1">
+                    <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest">Amount</label>
+                    <select
+                        value={currency}
+                        onChange={(e) => setCurrency(e.target.value as Currency)}
+                        className="text-[11px] font-bold text-primary bg-primary/5 px-3 py-1 rounded-lg border border-primary/20 outline-none cursor-pointer hover:bg-primary/10 transition-colors"
+                    >
+                        <option value="PKR">PKR (Rs)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="AED">AED (Dh)</option>
+                        <option value="MYR">MYR (RM)</option>
+                    </select>
+                </div>
                 <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-text-muted">PKR</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-text-muted">{getCurrencySymbol(currency)}</span>
                     <input
                         type="number"
                         placeholder="0"
@@ -115,7 +153,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                             <label className="text-[11px] font-bold text-text-muted uppercase tracking-widest px-1 mb-1 block">Transaction Fee</label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-text-muted text-[13px]">PKR</span>
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-text-muted text-[13px]">{getCurrencySymbol(currency)}</span>
                                     <input
                                         type="number"
                                         placeholder="0"
