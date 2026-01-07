@@ -4,7 +4,7 @@ import type { IDbProvider, DbExecuteResult, DbQueryResult } from './types';
 export class NativeDbProvider implements IDbProvider {
     private sqlite: SQLiteConnection = new SQLiteConnection(CapacitorSQLite);
     private db: SQLiteDBConnection | null = null;
-    private readonly DB_NAME = 'smart_ledger_db';
+    private readonly DB_NAME = 'smart_ledger.db';
 
     private isInitialized = false;
     private createSchema: (db: SQLiteDBConnection) => Promise<void>;
@@ -57,8 +57,6 @@ export class NativeDbProvider implements IDbProvider {
         // Capacitor SQLite requires using executeSet for transactional operations
         // We'll collect statements during the callback and execute them together
         const statements: Array<{ statement: string; values: any[] }> = [];
-        const queryResults: Map<number, any[]> = new Map();
-        let queryIndex = 0;
 
         // Create a proxy provider that collects statements instead of executing them
         const transactionProvider: IDbProvider = {
@@ -72,11 +70,8 @@ export class NativeDbProvider implements IDbProvider {
                 return { changes: 0 };
             },
             query: async (sql: string, params: any[] = []) => {
-                // For queries within transactions, we need to execute them immediately
-                // but we'll track them for now and execute the whole set atomically
-                const idx = queryIndex++;
-                statements.push({ statement: sql, values: params });
-                return { values: queryResults.get(idx) || [] };
+                // Execute the query immediately against the real DB so the callback can use the results
+                return await this.query(sql, params);
             },
             transaction: async () => {
                 throw new Error('Nested transactions not supported');

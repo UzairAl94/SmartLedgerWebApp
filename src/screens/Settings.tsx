@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Globe, Calendar, Bell, Shield, Palette, Download } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
+import { backupService } from '../services/backupService';
 import type { UserSettings } from '../types';
 
 interface SettingsProps {
@@ -176,6 +177,66 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                                 Using default internet rates (static for demo).
                             </p>
                         )}
+                    </div>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Data Management</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
+                    <button
+                        onClick={async () => {
+                            try {
+                                await backupService.exportBackup();
+                            } catch (error) {
+                                alert('Backup failed: ' + (error instanceof Error ? error.message : String(error)));
+                            }
+                        }}
+                        className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5"
+                    >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600">
+                            <Download size={20} />
+                        </div>
+                        <div className="flex-1 text-left">
+                            <span className="block font-semibold text-[15px]">Backup Data</span>
+                            <span className="text-[12px] text-text-muted">Save your ledger to a file</span>
+                        </div>
+                    </button>
+
+                    <div className="relative">
+                        <input
+                            type="file"
+                            accept=".json"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+
+                                if (confirm('Restore Data? This will replace all current data with the backup file. This cannot be undone.')) {
+                                    const reader = new FileReader();
+                                    reader.onload = async (event) => {
+                                        const content = event.target?.result as string;
+                                        try {
+                                            await backupService.restoreBackup(content);
+                                        } catch (error) {
+                                            alert('Restore failed: ' + (error instanceof Error ? error.message : String(error)));
+                                        }
+                                    };
+                                    reader.readAsText(file);
+                                }
+                                // Reset input
+                                e.target.value = '';
+                            }}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <div className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-50 text-indigo-600">
+                                <Shield size={20} />
+                            </div>
+                            <div className="flex-1 text-left">
+                                <span className="block font-semibold text-[15px]">Restore Data</span>
+                                <span className="text-[12px] text-text-muted">Import ledger from backup</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

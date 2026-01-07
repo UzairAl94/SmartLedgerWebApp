@@ -20,6 +20,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
     const [showFee, setShowFee] = useState(false);
     const [currency, setCurrency] = useState<Currency>('PKR');
 
+    // Log accounts and categories when modal opens
+    React.useEffect(() => {
+        console.log("--- Transaction Modal Opened ---");
+        console.log("Available Accounts:", accounts);
+        console.log("Available Categories:", categories);
+        console.log("--------------------------------");
+    }, []);
+
     // Set defaults when counts or categories change
     React.useEffect(() => {
         if (!accountId && accounts.length > 0) {

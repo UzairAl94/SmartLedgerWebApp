@@ -35,13 +35,27 @@ class TransactionService {
         return (result.values || []) as Transaction[];
     }
 
+    async getAllTransactions(): Promise<Transaction[]> {
+        const result = await sqliteService.query('SELECT * FROM transactions ORDER BY date DESC');
+        return (result.values || []) as Transaction[];
+    }
+
     // Add transaction and update account balance atomically
     async createTransaction(tx: Omit<Transaction, 'id'>) {
         const id = crypto.randomUUID();
 
+        console.log('Creating transaction for account:', tx.accountId);
+
         await sqliteService.transaction(async (db) => {
+            console.log('Inside transaction, querying for account:', tx.accountId);
             const accountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.accountId]);
+            console.log('Account query result:', accountResult);
+
             if (!accountResult.values || accountResult.values.length === 0) {
+                // Let's also check all accounts to see what's in the DB
+                const allAccounts = await db.query('SELECT id, name FROM accounts');
+                console.error('No account found with id:', tx.accountId);
+                console.error('Available accounts:', allAccounts.values);
                 throw new Error("Source account does not exist!");
             }
             const accountData = accountResult.values[0] as Account;
