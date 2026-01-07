@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { normalizeVoiceText } from "../utils/textUtils";
 
 export interface ParsedTransaction {
     type: 'income' | 'expense' | 'transfer' | null;
@@ -11,11 +12,15 @@ export interface ParsedTransaction {
     note: string | null;
 }
 
-const SYSTEM_PROMPT = `
+const getSystemPrompt = (accounts: string[], categories: string[]) => `
 You are a strict JSON parser for a personal finance ledger app.
 
 Your task:
 - Convert raw speech-to-text input into a structured JSON object.
+
+Context:
+- Existing Accounts: ${accounts.join(', ') || 'None'}
+- Existing Categories: ${categories.join(', ') || 'None'}
 
 Rules:
 - Output ONLY valid JSON
@@ -26,8 +31,8 @@ Rules:
 - Allowed transaction types: income, expense, transfer
 - Allowed currencies: PKR, USD, AED, MYR (default: PKR if not mentioned)
 - Detect currency from keywords: "dollars"/"usd" → USD, "dirhams"/"aed" → AED, "rupees"/"pkr" → PKR, "ringgit"/"myr" → MYR
-- Categories must be short lowercase nouns
-- Account names must be lowercase
+- **IMPORTANT**: category and account names MUST be in "Proper Case" (e.g., "Salary", "Food", "Cash").
+- Favor matching input to the 'Existing Accounts' and 'Existing Categories' provided above. If a match is close, use the exact name from the list.
 - Notes are free-form text (string or null)
 - Never guess missing values
 
@@ -35,24 +40,20 @@ JSON fields:
 - type (income/expense/transfer)
 - amount (number)
 - currency (PKR/USD/AED/MYR, default PKR)
-- category (lowercase string)
-- account (lowercase string)
-- fromAccount (for transfers, lowercase string)
-- toAccount (for transfers, lowercase string)
+- category (Proper Case string)
+- account (Proper Case string)
+- fromAccount (for transfers, Proper Case string)
+- toAccount (for transfers, Proper Case string)
 - note (string or null)
-
-Examples:
-"spent 500 dollars on groceries" → currency: "USD"
-"received 1000 dirhams salary" → currency: "AED"
-"paid 2500 for rent" → currency: "PKR" (default)
-"spent 200 ringgit on shopping" → currency: "MYR"
 `;
 
 export const deepSeekService = {
-    parseTransaction: async (text: string, apiKey: string): Promise<ParsedTransaction> => {
+    parseTransaction: async (text: string, apiKey: string, accounts: string[] = [], categories: string[] = []): Promise<ParsedTransaction> => {
         if (!apiKey) {
             throw new Error("DeepSeek API Key is missing");
         }
+
+        const normalizedText = normalizeVoiceText(text);
 
         const openai = new OpenAI({
             baseURL: 'https://api.deepseek.com',
@@ -63,8 +64,8 @@ export const deepSeekService = {
         try {
             const completion = await openai.chat.completions.create({
                 messages: [
-                    { role: "system", content: SYSTEM_PROMPT },
-                    { role: "user", content: text }
+                    { role: "system", content: getSystemPrompt(accounts, categories) },
+                    { role: "user", content: normalizedText }
                 ],
                 model: "deepseek-chat",
             });

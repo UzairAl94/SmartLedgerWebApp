@@ -3,6 +3,7 @@ import type { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import type { IDbProvider } from './db/types';
 import { NativeDbProvider } from './db/NativeDbProvider';
 import { WebDbProvider } from './db/WebDbProvider';
+import { seedCategoriesIfNeeded } from './db/seeder';
 
 class SqliteService {
     private provider: IDbProvider | null = null;
@@ -32,6 +33,9 @@ class SqliteService {
                 if (platform === 'web') {
                     await this.createSchema();
                 }
+
+                // Seed categories if it's the first time
+                await seedCategoriesIfNeeded(this.provider);
 
                 this.initPromise = null;
                 console.log(`SqliteService: Database initialized on ${platform}`);

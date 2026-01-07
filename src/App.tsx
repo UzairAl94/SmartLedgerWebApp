@@ -118,7 +118,14 @@ const App: React.FC = () => {
       }
 
       // Parse with DeepSeek
-      const parsed = await deepSeekService.parseTransaction(voiceResult, settings.deepSeekApiKey);
+      const accountNames = accounts.map(a => a.name);
+      const categoryNames = categories.map(c => c.name);
+      const parsed = await deepSeekService.parseTransaction(
+        voiceResult,
+        settings.deepSeekApiKey,
+        accountNames,
+        categoryNames
+      );
 
       // Process with Ledger Engine
       await ledgerEngine.processTransaction(parsed, accounts, categories);

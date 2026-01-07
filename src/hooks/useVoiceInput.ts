@@ -84,7 +84,13 @@ export const useVoiceInput = (onResult?: (text: string) => void): UseVoiceInputR
             setIsRecording(true);
         } catch (err) {
             console.error("Error accessing microphone:", err);
-            setError("Could not access microphone. Please allow permissions.");
+            let msg = "Could not access microphone.";
+            if (err instanceof Error) {
+                if (err.name === 'NotAllowedError') msg = "Microphone permission denied. Please enable it in Android Settings.";
+                else if (err.name === 'NotFoundError') msg = "No microphone found on this device.";
+                else msg = `Microphone error: ${err.message}`;
+            }
+            setError(msg);
             setIsRecording(false);
         }
     };

@@ -53,12 +53,51 @@ export class NativeDbProvider implements IDbProvider {
 
     async transaction(callback: (provider: IDbProvider) => Promise<void>): Promise<void> {
         if (!this.db) throw new Error('Native database not initialized');
+
+        // Capacitor SQLite requires using executeSet for transactional operations
+        // We'll collect statements during the callback and execute them together
+        const statements: Array<{ statement: string; values: any[] }> = [];
+        const queryResults: Map<number, any[]> = new Map();
+        let queryIndex = 0;
+
+        // Create a proxy provider that collects statements instead of executing them
+        const transactionProvider: IDbProvider = {
+            initialize: async () => { },
+            execute: async (sql: string, params: any[] = []) => {
+                statements.push({ statement: sql, values: params });
+                return { changes: 0 };
+            },
+            run: async (sql: string, params: any[] = []) => {
+                statements.push({ statement: sql, values: params });
+                return { changes: 0 };
+            },
+            query: async (sql: string, params: any[] = []) => {
+                // For queries within transactions, we need to execute them immediately
+                // but we'll track them for now and execute the whole set atomically
+                const idx = queryIndex++;
+                statements.push({ statement: sql, values: params });
+                return { values: queryResults.get(idx) || [] };
+            },
+            transaction: async () => {
+                throw new Error('Nested transactions not supported');
+            }
+        };
+
         try {
-            await this.db.execute('BEGIN TRANSACTION');
-            await callback(this);
-            await this.db.execute('COMMIT');
+            // Collect all statements via the callback
+            await callback(transactionProvider);
+
+            // Execute all statements as a single transaction using executeSet
+            if (statements.length > 0) {
+                const set = statements.map(stmt => ({
+                    statement: stmt.statement,
+                    values: stmt.values
+                }));
+
+                await this.db.executeSet(set, true); // true = use transaction
+            }
         } catch (error) {
-            await this.db.execute('ROLLBACK');
+            // executeSet handles rollback automatically on error
             throw error;
         }
     }

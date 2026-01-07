@@ -16,7 +16,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
-    const { isRecording, isProcessing, startRecording, stopRecording } = useVoiceInput(onVoiceResult);
+    const { isRecording, isProcessing, startRecording, stopRecording, error: voiceError } = useVoiceInput(onVoiceResult);
     const [showBalance, setShowBalance] = useState(false);
     // Use the main currency from settings
     const mainCurrency = settings?.mainCurrency || 'PKR';
@@ -102,6 +102,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
                         <span>{isRecording ? 'Stop' : isProcessing ? 'Processing...' : 'Voice Input'}</span>
                     </button>
                 </div>
+                {voiceError && (
+                    <div className="mt-4 p-4 bg-expense/10 border border-expense/20 rounded-2xl">
+                        <p className="text-[13px] font-semibold text-expense">{voiceError}</p>
+                    </div>
+                )}
             </section>
 
             <section>
