@@ -12,11 +12,12 @@ interface TransactionsProps {
     accountFilter?: string | null;
     setAccountFilter?: (id: string | null) => void;
     settings: UserSettings | null;
+    onEditTx: (tx: Transaction) => void;
 }
 
 type DateRange = '7days' | '30days' | 'all';
 
-const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, accounts, accountFilter, setAccountFilter, settings }) => {
+const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, accounts, accountFilter, setAccountFilter, settings, onEditTx }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense' | 'Transfer'>('All');
     const [dateRange, setDateRange] = useState<DateRange>('7days');
@@ -155,7 +156,11 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
                                     const toAccount = tx.toAccountId ? accounts.find((a: Account) => a.id === tx.toAccountId) : null;
 
                                     return (
-                                        <div key={tx.id} className="flex items-center p-4 bg-bg-secondary rounded-2xl gap-4 border border-black/5 shadow-sm active:scale-[0.99] transition-all">
+                                        <div
+                                            key={tx.id}
+                                            onClick={() => onEditTx(tx)}
+                                            className="flex items-center p-4 bg-bg-secondary rounded-2xl gap-4 border border-black/5 shadow-sm active:scale-[0.98] transition-all cursor-pointer hover:border-primary/20"
+                                        >
                                             <div className={`w-11 h-11 rounded-xl flex items-center justify-center border border-black/5 ${tx.type === 'Transfer' ? 'bg-blue-50 text-blue-600' : 'bg-bg-primary'}`}>
                                                 {tx.type === 'Transfer' ? (
                                                     <div className="w-5 h-5 flex items-center justify-center">→</div>

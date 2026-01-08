@@ -28,6 +28,8 @@ const App: React.FC = () => {
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [initialCategoryType, setInitialCategoryType] = useState<'Expense' | 'Income'>('Expense');
+  const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
 
   // Real Data State
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -152,12 +154,21 @@ const App: React.FC = () => {
     setActiveTab('History');
   };
 
+  const handleEditTransaction = (tx: Transaction) => {
+    setTransactionToEdit(tx);
+    setIsAddTxOpen(true);
+  };
+
   const renderScreen = () => {
     switch (activeTab) {
       case 'Home':
         return (
           <Dashboard
-            onAddTx={() => setIsAddTxOpen(true)}
+            onAddTx={() => {
+              setTransactionToEdit(null);
+              setIsAddTxOpen(true);
+            }}
+            onEditTx={handleEditTransaction}
             onViewAll={() => setActiveTab('History')}
             onVoiceResult={handleVoiceResult}
             accounts={accounts}
@@ -186,6 +197,7 @@ const App: React.FC = () => {
             accountFilter={accountFilter}
             setAccountFilter={setAccountFilter}
             settings={settings}
+            onEditTx={handleEditTransaction}
           />
         );
       case 'Insights':
@@ -197,13 +209,20 @@ const App: React.FC = () => {
           <Categories
             categories={categories}
             transactions={transactions}
-            onAddCategory={() => setIsAddCategoryOpen(true)}
+            onAddCategory={(type) => {
+              setInitialCategoryType(type);
+              setIsAddCategoryOpen(true);
+            }}
           />
         );
       default:
         return (
           <Dashboard
-            onAddTx={() => setIsAddTxOpen(true)}
+            onAddTx={() => {
+              setTransactionToEdit(null);
+              setIsAddTxOpen(true);
+            }}
+            onEditTx={handleEditTransaction}
             onViewAll={() => setActiveTab('History')}
             onVoiceResult={handleVoiceResult}
             accounts={accounts}
@@ -244,13 +263,20 @@ const App: React.FC = () => {
 
       <BottomSheet
         isOpen={isAddTxOpen}
-        onClose={() => setIsAddTxOpen(false)}
-        title="Add Transaction"
+        onClose={() => {
+          setIsAddTxOpen(false);
+          setTransactionToEdit(null);
+        }}
+        title={transactionToEdit ? "Edit Transaction" : "Add Transaction"}
       >
         <TransactionForm
-          onSuccess={() => setIsAddTxOpen(false)}
+          onSuccess={() => {
+            setIsAddTxOpen(false);
+            setTransactionToEdit(null);
+          }}
           accounts={accounts}
           categories={categories}
+          transactionToEdit={transactionToEdit}
         />
       </BottomSheet>
 
@@ -322,6 +348,7 @@ const App: React.FC = () => {
         <CategoryForm
           onSuccess={() => setIsAddCategoryOpen(false)}
           categories={categories}
+          initialType={initialCategoryType}
         />
       </BottomSheet>
     </>

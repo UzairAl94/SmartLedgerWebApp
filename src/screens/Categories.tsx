@@ -6,7 +6,7 @@ import type { Category, Transaction } from '../types';
 interface CategoriesProps {
     categories: Category[];
     transactions: Transaction[];
-    onAddCategory: () => void;
+    onAddCategory: (type: 'Expense' | 'Income') => void;
 }
 
 const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAddCategory }) => {
@@ -37,7 +37,7 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
                 <div className="flex justify-between items-center px-1">
                     <h3 className="text-[16px] font-bold">{activeType} Categories</h3>
                     <button
-                        onClick={onAddCategory}
+                        onClick={() => onAddCategory(activeType)}
                         className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center active:scale-95 transition-transform"
                     >
                         <Plus size={18} />

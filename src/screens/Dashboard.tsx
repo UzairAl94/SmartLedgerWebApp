@@ -7,6 +7,7 @@ import type { Account, Transaction, Category, UserSettings } from '../types';
 
 interface DashboardProps {
     onAddTx: () => void;
+    onEditTx: (tx: Transaction) => void;
     onViewAll: () => void;
     onVoiceResult: (text: string) => void;
     accounts: Account[];
@@ -15,7 +16,7 @@ interface DashboardProps {
     settings: UserSettings | null;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
     const { isRecording, isProcessing, startRecording, stopRecording, error: voiceError } = useVoiceInput(onVoiceResult);
     const [showBalance, setShowBalance] = useState(false);
     // Use the main currency from settings
@@ -123,10 +124,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
                 <div className="flex flex-col gap-2">
                     {recentTransactions.map(tx => {
                         const category = tx.categoryId ? categories.find((c: Category) => c.id === tx.categoryId) : null;
+                        const account = accounts.find((a: Account) => a.id === tx.accountId);
                         const toAccount = tx.toAccountId ? accounts.find((a: Account) => a.id === tx.toAccountId) : null;
 
                         return (
-                            <div key={tx.id} className="flex items-center p-4 bg-bg-secondary rounded-xl gap-4 shadow-sm">
+                            <div
+                                key={tx.id}
+                                onClick={() => onEditTx(tx)}
+                                className="flex items-center p-4 bg-bg-secondary rounded-xl gap-4 shadow-sm active:scale-[0.98] transition-all cursor-pointer border border-transparent hover:border-black/5"
+                            >
                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tx.type === 'Transfer' ? 'bg-blue-50 text-blue-600' : ''}`} style={tx.type !== 'Transfer' ? { backgroundColor: category?.color + '20' } : undefined}>
                                     {tx.type === 'Transfer' ? (
                                         <div className="w-5 h-5 flex items-center justify-center font-bold">→</div>
@@ -134,13 +140,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onViewAll, onVoiceResult
                                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category?.color }}></div>
                                     )}
                                 </div>
-                                <div className="flex-1 flex flex-col">
+                                <div className="flex-1 flex flex-col gap-0.5">
                                     <span className="font-semibold text-[14px]">
                                         {tx.type === 'Transfer'
                                             ? `Transfer to ${toAccount?.name || 'Unknown'}`
                                             : category?.name || 'Uncategorized'}
                                     </span>
-                                    <span className="text-[12px] text-text-secondary">{tx.note}</span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[10px] font-bold text-text-muted bg-black/5 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                            {account?.name || 'Unknown'}
+                                        </span>
+                                        {tx.note && <span className="text-[12px] text-text-secondary truncate max-w-[120px]">{tx.note}</span>}
+                                        {tx.fee ? (
+                                            <span className="text-[10px] text-expense font-bold whitespace-nowrap">
+                                                +{formatCurrency(tx.fee, tx.currency)} fee
+                                            </span>
+                                        ) : null}
+                                    </div>
                                 </div>
                                 <div className={`font-bold text-[15px] ${tx.type === 'Income' ? 'text-income' : tx.type === 'Expense' ? 'text-text-primary' : 'text-blue-600'}`}>
                                     {tx.type === 'Income' ? '+' : '-'} {formatCurrency(tx.amount, tx.currency)}

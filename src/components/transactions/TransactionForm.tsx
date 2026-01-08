@@ -1,35 +1,41 @@
 import React, { useState } from 'react';
 import { transactionService } from '../../services/transactionService';
-import type { TransactionType, Category, Account, Currency } from '../../types';
+import type { TransactionType, Category, Account, Currency, Transaction } from '../../types';
 
 interface TransactionFormProps {
     onSuccess: () => void;
     accounts: Account[];
     categories: Category[];
+    transactionToEdit?: Transaction | null;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, categories }) => {
-    const [type, setType] = useState<TransactionType>('Expense');
-    const [amount, setAmount] = useState('');
-    const [categoryId, setCategoryId] = useState('');
-    const [accountId, setAccountId] = useState('');
-    const [note, setNote] = useState('');
+const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, categories, transactionToEdit }) => {
+    const isEditMode = !!transactionToEdit;
+
+    const [type, setType] = useState<TransactionType>(transactionToEdit?.type || 'Expense');
+    const [amount, setAmount] = useState(transactionToEdit?.amount.toString() || '');
+    const [categoryId, setCategoryId] = useState(transactionToEdit?.categoryId || '');
+    const [accountId, setAccountId] = useState(transactionToEdit?.accountId || '');
+    const [note, setNote] = useState(transactionToEdit?.note || '');
     const [isSaving, setIsSaving] = useState(false);
-    const [toAccountId, setToAccountId] = useState('');
-    const [fee, setFee] = useState('');
-    const [showFee, setShowFee] = useState(false);
-    const [currency, setCurrency] = useState<Currency>('PKR');
+    const [toAccountId, setToAccountId] = useState(transactionToEdit?.toAccountId || '');
+    const [fee, setFee] = useState(transactionToEdit?.fee?.toString() || '');
+    const [showFee, setShowFee] = useState(!!transactionToEdit?.fee);
+    const [currency, setCurrency] = useState<Currency>(transactionToEdit?.currency || 'PKR');
 
     // Log accounts and categories when modal opens
     React.useEffect(() => {
         console.log("--- Transaction Modal Opened ---");
+        console.log("Edit Mode:", isEditMode);
         console.log("Available Accounts:", accounts);
         console.log("Available Categories:", categories);
         console.log("--------------------------------");
     }, []);
 
-    // Set defaults when counts or categories change
+    // Set defaults when counts or categories change - only if NOT in edit mode
     React.useEffect(() => {
+        if (isEditMode) return;
+
         if (!accountId && accounts.length > 0) {
             setAccountId(accounts[0].id);
             setCurrency(accounts[0].currency); // Set currency from first account
@@ -43,7 +49,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
 
         const firstCat = categories.find(c => c.type === (type === 'Transfer' ? 'Expense' : type));
         if (!categoryId && firstCat) setCategoryId(firstCat.id);
-    }, [accounts, categories, type, accountId]);
+    }, [accounts, categories, type, accountId, isEditMode]);
 
     // Update currency when account changes
     const lastAccountId = React.useRef(accountId);
@@ -68,22 +74,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                 amount: parseFloat(amount),
                 currency: currency, // Use selected currency
                 accountId,
-                date: new Date().toISOString(),
+                date: transactionToEdit?.date || new Date().toISOString(),
                 note,
-                type
+                type,
+                fee: showFee && fee ? parseFloat(fee) : null,
+                categoryId: type === 'Transfer' ? null : categoryId,
+                toAccountId: type === 'Transfer' ? toAccountId : null,
             };
 
-            if (type === 'Transfer') {
-                txData.toAccountId = toAccountId;
+            if (isEditMode && transactionToEdit) {
+                await transactionService.updateTransaction(transactionToEdit, txData);
             } else {
-                txData.categoryId = categoryId;
+                await transactionService.createTransaction(txData);
             }
-
-            if (showFee && fee) {
-                txData.fee = parseFloat(fee);
-            }
-
-            await transactionService.createTransaction(txData);
             onSuccess();
         } catch (error) {
             console.error("Error saving transaction:", error);
