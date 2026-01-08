@@ -132,7 +132,7 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                             <button
                                 disabled={isDeleting}
                                 onClick={async () => {
-                                    if (window.confirm("Are you sure you want to delete this account? All transactions linked to it will remain but may cause calculation issues.")) {
+                                    if (window.confirm("Are you sure you want to delete this account? This will also PERMANENTLY delete all transactions associated with this account. This action cannot be undone.")) {
                                         setIsDeleting(true);
                                         try {
                                             await accountService.deleteAccount(selectedAccount.id);

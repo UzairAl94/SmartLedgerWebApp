@@ -26,6 +26,7 @@ export class NativeDbProvider implements IDbProvider {
         }
 
         await this.db!.open();
+        await this.db!.execute('PRAGMA foreign_keys = ON;');
         await this.createSchema(this.db!);
         this.isInitialized = true;
     }

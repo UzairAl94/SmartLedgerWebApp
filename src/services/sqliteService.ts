@@ -96,9 +96,9 @@ class SqliteService {
                 note TEXT,
                 type TEXT NOT NULL,
                 fee REAL,
-                FOREIGN KEY(accountId) REFERENCES accounts(id),
-                FOREIGN KEY(toAccountId) REFERENCES accounts(id),
-                FOREIGN KEY(categoryId) REFERENCES categories(id)
+                FOREIGN KEY(accountId) REFERENCES accounts(id) ON DELETE CASCADE,
+                FOREIGN KEY(toAccountId) REFERENCES accounts(id) ON DELETE CASCADE,
+                FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS settings (

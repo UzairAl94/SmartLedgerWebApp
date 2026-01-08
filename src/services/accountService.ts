@@ -58,8 +58,18 @@ class AccountService {
 
     // Delete an account
     async deleteAccount(id: string) {
-        await sqliteService.execute('DELETE FROM accounts WHERE id = ?', [id]);
+        await sqliteService.transaction(async (db) => {
+            // Manually delete transactions associated with this account to avoid FK constraint errors
+            // specifically for cases where ON DELETE CASCADE hasn't been applied to existing DBs.
+            await db.execute('DELETE FROM transactions WHERE accountId = ? OR toAccountId = ?', [id, id]);
+            await db.execute('DELETE FROM accounts WHERE id = ?', [id]);
+        });
+
         await this.fetchAndNotify();
+
+        // Dynamically import to avoid circular dependency at top-level
+        const { transactionService } = await import('./transactionService');
+        await transactionService.fetchAndNotify();
     }
 }
 

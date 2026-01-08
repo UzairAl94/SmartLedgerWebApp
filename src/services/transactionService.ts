@@ -18,7 +18,7 @@ class TransactionService {
         };
     }
 
-    private async fetchAndNotify(maxLimit = 50) {
+    async fetchAndNotify(maxLimit = 50) {
         try {
             const transactions = await this.getRecentTransactions(maxLimit);
             this.listeners.forEach(listener => listener(transactions));
