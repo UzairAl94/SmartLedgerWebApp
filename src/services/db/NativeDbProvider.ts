@@ -1,10 +1,11 @@
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { Capacitor } from '@capacitor/core';
 import type { IDbProvider, DbExecuteResult, DbQueryResult } from './types';
 
 export class NativeDbProvider implements IDbProvider {
     private sqlite: SQLiteConnection = new SQLiteConnection(CapacitorSQLite);
     private db: SQLiteDBConnection | null = null;
-    private readonly DB_NAME = 'smart_ledger.db';
+    private readonly DB_NAME = 'smartledgerdb';
 
     private isInitialized = false;
     private createSchema: (db: SQLiteDBConnection) => Promise<void>;
@@ -16,19 +17,36 @@ export class NativeDbProvider implements IDbProvider {
     async initialize(): Promise<void> {
         if (this.isInitialized) return;
 
-        const ret = await this.sqlite.checkConnectionsConsistency();
-        const isConn = (await this.sqlite.isConnection(this.DB_NAME, false)).result;
+        const platform = Capacitor.getPlatform();
+        console.log('NativeDbProvider: Initializing on platform:', platform);
 
-        if (ret.result && isConn) {
-            this.db = await this.sqlite.retrieveConnection(this.DB_NAME, false);
-        } else {
-            this.db = await this.sqlite.createConnection(this.DB_NAME, false, 'no-encryption', 1, false);
+        try {
+            // For web platform, init the web store
+            if (platform === 'web') {
+                await this.sqlite.initWebStore();
+            }
+
+            const ret = await this.sqlite.checkConnectionsConsistency();
+            console.log('NativeDbProvider: Connection consistency check:', ret);
+
+            const isConn = (await this.sqlite.isConnection(this.DB_NAME, false)).result;
+            console.log('NativeDbProvider: Is connection exists:', isConn);
+
+            if (ret.result && isConn) {
+                this.db = await this.sqlite.retrieveConnection(this.DB_NAME, false);
+            } else {
+                this.db = await this.sqlite.createConnection(this.DB_NAME, false, 'no-encryption', 1, false);
+            }
+
+            await this.db!.open();
+            await this.db!.execute('PRAGMA foreign_keys = ON;');
+            await this.createSchema(this.db!);
+            this.isInitialized = true;
+            console.log('NativeDbProvider: Successfully initialized');
+        } catch (error) {
+            console.error('NativeDbProvider: Initialization failed:', error);
+            throw error;
         }
-
-        await this.db!.open();
-        await this.db!.execute('PRAGMA foreign_keys = ON;');
-        await this.createSchema(this.db!);
-        this.isInitialized = true;
     }
 
     async execute(sql: string, params: any[] = []): Promise<DbExecuteResult> {
