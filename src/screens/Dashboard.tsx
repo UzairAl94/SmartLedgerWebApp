@@ -24,7 +24,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewAll, onV
 
     // Calculate Total Balance
     const totalBalance = accounts.reduce((acc: number, account: Account) => {
-        return acc + convertCurrency(account.balance, account.currency, mainCurrency);
+        return acc + convertCurrency(account.balance, account.currency, mainCurrency, settings?.customRates, settings?.useCustomRates);
     }, 0);
 
     // Recent Transactions
@@ -35,11 +35,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewAll, onV
     // Calculate Income and Expenses
     const incomeTotal = transactions
         .filter(t => t.type === 'Income')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
     const expenseTotal = transactions
         .filter(t => t.type === 'Expense')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
     return (
         <div className="flex flex-col gap-8 pb-8">

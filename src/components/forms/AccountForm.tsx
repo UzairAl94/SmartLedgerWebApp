@@ -89,8 +89,9 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts }) => {
                         onChange={(e) => setCurrency(e.target.value as Currency)}
                     >
                         <option value="PKR">PKR</option>
-                        <option value="AED">AED</option>
                         <option value="USD">USD</option>
+                        <option value="AED">AED</option>
+                        <option value="MYR">MYR</option>
                     </select>
                 </div>
             </div>

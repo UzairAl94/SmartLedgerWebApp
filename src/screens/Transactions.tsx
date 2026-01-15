@@ -62,11 +62,11 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
 
     const incomeTotal = finalTransactions
         .filter(t => t.type === 'Income')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
     const expenseTotal = finalTransactions
         .filter(t => t.type === 'Expense')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
     return (
         <div className="flex flex-col gap-4 pb-8 h-full">

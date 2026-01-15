@@ -93,11 +93,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories, setting
 
             const income = periodTxs
                 .filter(t => t.type === 'Income')
-                .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+                .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
             const expense = periodTxs
                 .filter(t => t.type === 'Expense')
-                .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0);
+                .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
             return {
                 name: label,
@@ -112,14 +112,14 @@ const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories, setting
     const incomeTotal = useMemo(() =>
         filteredTransactions
             .filter(t => t.type === 'Income')
-            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0),
-        [filteredTransactions, mainCurrency]);
+            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0),
+        [filteredTransactions, mainCurrency, settings]);
 
     const expenseTotal = useMemo(() =>
         filteredTransactions
             .filter(t => t.type === 'Expense')
-            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0),
-        [filteredTransactions, mainCurrency]);
+            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0),
+        [filteredTransactions, mainCurrency, settings]);
 
     const categoryData = useMemo(() =>
         categories
@@ -127,7 +127,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories, setting
             .map(c => {
                 const total = filteredTransactions
                     .filter(t => t.categoryId === c.id)
-                    .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency), 0); // Normalized to main currency if needed, or keeping raw if single currency
+                    .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0); // Normalized to main currency if needed, or keeping raw if single currency
                 // Note: Ideally category breakdown should also normalize currency if mixed.
                 // Assuming mixed for safety:
                 return { name: c.name, value: total, color: c.color };
