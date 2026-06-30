@@ -54,6 +54,15 @@ class SqliteService {
         // This is specifically for native SQLite
         const schema = this.getSchemaSql();
         await db.execute(schema);
+
+        // Migrations for existing installs (CREATE TABLE IF NOT EXISTS won't add
+        // new columns). Each guarded — re-running on an up-to-date DB just throws
+        // "duplicate column name", which we ignore.
+        try {
+            await db.execute('ALTER TABLE transactions ADD COLUMN receiptPath TEXT');
+        } catch {
+            // column already exists
+        }
     }
 
     private async createSchema() {
@@ -96,6 +105,7 @@ class SqliteService {
                 note TEXT,
                 type TEXT NOT NULL,
                 fee REAL,
+                receiptPath TEXT,
                 FOREIGN KEY(accountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(toAccountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL

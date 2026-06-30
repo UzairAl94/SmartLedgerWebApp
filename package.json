@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.2",
     "@capacitor/android": "^8.0.0",
+    "@capacitor/camera": "^8.2.0",
     "@capacitor/cli": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/filesystem": "^8.0.0",
@@ -22,6 +23,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.26",
+    "jszip": "^3.10.1",
     "localforage": "^1.10.0",
     "lucide-react": "^0.562.0",
     "openai": "^6.15.0",

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { Paperclip, Download, X } from 'lucide-react';
 import { transactionService } from '../../services/transactionService';
+import { receiptService } from '../../services/receiptService';
 import type { TransactionType, Category, Account, Currency, Transaction } from '../../types';
 
 interface TransactionFormProps {
@@ -22,6 +24,38 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
     const [fee, setFee] = useState(transactionToEdit?.fee?.toString() || '');
     const [showFee, setShowFee] = useState(!!transactionToEdit?.fee);
     const [currency, setCurrency] = useState<Currency>(transactionToEdit?.currency || 'PKR');
+    const [receiptPath, setReceiptPath] = useState(transactionToEdit?.receiptPath || '');
+    const [receiptSrc, setReceiptSrc] = useState<string | null>(null);
+    const [receiptBusy, setReceiptBusy] = useState(false);
+
+    // Load a preview whenever the receipt path changes.
+    React.useEffect(() => {
+        if (!receiptPath) { setReceiptSrc(null); return; }
+        let cancelled = false;
+        receiptService.displaySrc(receiptPath).then(src => { if (!cancelled) setReceiptSrc(src); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [receiptPath]);
+
+    const handleAttachReceipt = async () => {
+        setReceiptBusy(true);
+        try {
+            const path = await receiptService.capture();
+            if (path) setReceiptPath(path);
+        } catch (e) {
+            console.error('Receipt capture failed', e);
+        } finally {
+            setReceiptBusy(false);
+        }
+    };
+
+    const handleRemoveReceipt = async () => {
+        // If this is a freshly captured file (not the saved original), delete it now
+        // to avoid an orphan; the original is removed on save by updateTransaction.
+        if (receiptPath && receiptPath !== transactionToEdit?.receiptPath) {
+            await receiptService.remove(receiptPath);
+        }
+        setReceiptPath('');
+    };
 
     // Log accounts and categories when modal opens
     React.useEffect(() => {
@@ -80,6 +114,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                 fee: showFee && fee ? parseFloat(fee) : null,
                 categoryId: type === 'Transfer' ? null : categoryId,
                 toAccountId: type === 'Transfer' ? toAccountId : null,
+                receiptPath: receiptPath || null,
             };
 
             if (isEditMode && transactionToEdit) {
@@ -239,6 +274,47 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                 />
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest px-1">Receipt</label>
+                {receiptPath ? (
+                    <div className="flex items-center gap-3 bg-white border border-black/5 p-3 rounded-2xl">
+                        {receiptSrc ? (
+                            <img src={receiptSrc} alt="Receipt" className="w-14 h-14 rounded-xl object-cover border border-black/5" />
+                        ) : (
+                            <div className="w-14 h-14 rounded-xl bg-bg-primary flex items-center justify-center text-text-muted">
+                                <Paperclip size={20} />
+                            </div>
+                        )}
+                        <span className="flex-1 text-[13px] font-semibold text-text-secondary">Receipt attached</span>
+                        <button
+                            type="button"
+                            onClick={() => receiptService.download(receiptPath)}
+                            className="w-10 h-10 rounded-xl bg-bg-primary flex items-center justify-center text-primary active:scale-95 transition-all"
+                            title="Download receipt"
+                        >
+                            <Download size={18} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleRemoveReceipt}
+                            className="w-10 h-10 rounded-xl bg-bg-primary flex items-center justify-center text-expense active:scale-95 transition-all"
+                            title="Remove receipt"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={handleAttachReceipt}
+                        disabled={receiptBusy}
+                        className="flex items-center justify-center gap-2 w-full py-3.5 bg-white border border-dashed border-black/15 rounded-2xl text-[14px] font-semibold text-text-secondary active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        <Paperclip size={18} /> {receiptBusy ? 'Opening…' : 'Attach Receipt'}
+                    </button>
+                )}
             </div>
 
             <button

@@ -1,5 +1,6 @@
 import { sqliteService } from './sqliteService';
-import type { Account } from '../types';
+import { receiptService } from './receiptService';
+import type { Account, Transaction } from '../types';
 
 type Listener = (accounts: Account[]) => void;
 
@@ -58,12 +59,27 @@ class AccountService {
 
     // Delete an account
     async deleteAccount(id: string) {
+        // Collect receipt files of the transactions about to be bulk-deleted, so we
+        // can remove them after (the bulk DELETE below bypasses deleteTransaction).
+        const txToDelete = await sqliteService.query(
+            'SELECT receiptPath FROM transactions WHERE accountId = ? OR toAccountId = ?',
+            [id, id]
+        );
+        const receiptPaths = ((txToDelete.values || []) as Transaction[])
+            .map(t => t.receiptPath)
+            .filter((p): p is string => !!p);
+
         await sqliteService.transaction(async (db) => {
             // Manually delete transactions associated with this account to avoid FK constraint errors
             // specifically for cases where ON DELETE CASCADE hasn't been applied to existing DBs.
             await db.execute('DELETE FROM transactions WHERE accountId = ? OR toAccountId = ?', [id, id]);
             await db.execute('DELETE FROM accounts WHERE id = ?', [id]);
         });
+
+        // Remove orphaned receipt files for the deleted transactions.
+        for (const path of receiptPaths) {
+            await receiptService.remove(path);
+        }
 
         await this.fetchAndNotify();
 

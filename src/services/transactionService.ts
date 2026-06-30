@@ -1,6 +1,7 @@
 import { sqliteService } from './sqliteService';
 import { accountService } from './accountService';
 import { settingsService } from './settingsService';
+import { receiptService } from './receiptService';
 import { convertCurrency } from '../utils/format';
 import type { Transaction, Account } from '../types';
 
@@ -83,8 +84,8 @@ class TransactionService {
 
             // Create the transaction record
             await db.run(
-                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null]
+                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null]
             );
 
             // Update source account balance
@@ -146,6 +147,9 @@ class TransactionService {
             }
         });
 
+        // Remove the receipt file now that the transaction is gone (no orphans).
+        await receiptService.remove(tx.receiptPath);
+
         await this.fetchAndNotify();
         await accountService.fetchAndNotify(); // Refresh accounts too
     }
@@ -182,8 +186,8 @@ class TransactionService {
 
             // 2. Update the transaction record
             await db.run(
-                'UPDATE transactions SET amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?, note = ?, type = ?, fee = ? WHERE id = ?',
-                [newTxData.amount, newTxData.currency, newTxData.categoryId || null, newTxData.accountId, newTxData.toAccountId || null, newTxData.date, newTxData.note || null, newTxData.type, newTxData.fee || null, oldTx.id]
+                'UPDATE transactions SET amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?, note = ?, type = ?, fee = ?, receiptPath = ? WHERE id = ?',
+                [newTxData.amount, newTxData.currency, newTxData.categoryId || null, newTxData.accountId, newTxData.toAccountId || null, newTxData.date, newTxData.note || null, newTxData.type, newTxData.fee || null, newTxData.receiptPath || null, oldTx.id]
             );
 
             // 3. Apply new transaction impact
@@ -217,11 +221,16 @@ class TransactionService {
             }
         });
 
+        // If the receipt changed or was removed, delete the old file (no orphans).
+        if (oldTx.receiptPath && oldTx.receiptPath !== newTxData.receiptPath) {
+            await receiptService.remove(oldTx.receiptPath);
+        }
+
         await this.fetchAndNotify();
         await accountService.fetchAndNotify(); // Refresh accounts too
     }
 
-    // Reconcile every account's stored balance from scratch:
+    // Reconcile every account's balance from scratch:
     // balance = initialBalance + sum of its transactions. Fixes any drift in the
     // denormalized balance caused by interrupted writes or past bugs.
     async recalculateBalances() {

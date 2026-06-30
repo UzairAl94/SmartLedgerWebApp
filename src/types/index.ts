@@ -34,6 +34,7 @@ export interface Transaction {
   note?: string;
   type: TransactionType;
   fee?: number;
+  receiptPath?: string; // relative path under Filesystem Directory.Data, e.g. receipts/<uuid>.jpg
 }
 
 export interface Budget {
