@@ -63,7 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
                         <div>
                             <span className="block text-[10px] uppercase tracking-wider opacity-70">Income</span>
                             <strong className="text-[14px] block">
-                                {formatCurrency(incomeTotal, mainCurrency)}
+                                {showBalance ? formatCurrency(incomeTotal, mainCurrency) : '••••'}
                             </strong>
                         </div>
                     </div>
@@ -74,7 +74,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
                         <div>
                             <span className="block text-[10px] uppercase tracking-wider opacity-70">Expenses</span>
                             <strong className="text-[14px] block">
-                                {formatCurrency(expenseTotal, mainCurrency)}
+                                {showBalance ? formatCurrency(expenseTotal, mainCurrency) : '••••'}
                             </strong>
                         </div>
                     </div>

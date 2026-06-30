@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Banknote, Trash2 } from 'lucide-react';
+import { Plus, Banknote, Trash2, Eye, EyeOff } from 'lucide-react';
 import { accountService } from '../services/accountService';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { isAmountHidden, MASK } from '../utils/visibility';
@@ -24,12 +24,20 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
     const netWorth = accounts.reduce((sum: number, acc: Account) => sum + convertCurrency(acc.balance, acc.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
     const [isDeleting, setIsDeleting] = useState(false);
+    const [showAmounts, setShowAmounts] = useState(false);
 
     return (
         <div className="flex flex-col gap-6 pb-8">
-            <section className="bg-white p-6 rounded-3xl shadow-premium flex flex-col items-center text-center gap-1 border border-black/5">
+            <section className="bg-white p-6 rounded-3xl shadow-premium flex flex-col items-center text-center gap-1 border border-black/5 relative">
+                <button
+                    onClick={() => setShowAmounts(s => !s)}
+                    className="absolute top-4 right-4 text-text-muted active:scale-90 transition-transform"
+                    title={showAmounts ? 'Hide amounts' : 'Show amounts'}
+                >
+                    {showAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
                 <span className="text-[12px] text-text-muted uppercase tracking-widest font-bold">Total Net Worth</span>
-                <h2 className="text-[28px] font-bold text-text-primary">{formatCurrency(netWorth, mainCurrency)}</h2>
+                <h2 className="text-[28px] font-bold text-text-primary">{showAmounts ? formatCurrency(netWorth, mainCurrency) : '••••••'}</h2>
             </section>
 
             <section className="flex flex-col gap-3">
@@ -58,8 +66,8 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                                 <span className="text-[12px] text-text-muted font-medium">{account.type}</span>
                             </div>
                             <div className="text-right">
-                                <span className="block font-bold text-[15px]">{formatCurrency(account.balance, account.currency)}</span>
-                                {account.currency !== mainCurrency && (
+                                <span className="block font-bold text-[15px]">{showAmounts ? formatCurrency(account.balance, account.currency) : '••••'}</span>
+                                {showAmounts && account.currency !== mainCurrency && (
                                     <span className="text-[11px] text-text-muted font-medium">
                                         ≈ {formatCurrency(convertCurrency(account.balance, account.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), mainCurrency)}
                                     </span>
