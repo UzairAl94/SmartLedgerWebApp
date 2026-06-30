@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
@@ -12,10 +12,11 @@ import type { UserSettings } from '../types';
 interface SettingsProps {
     onNavigateCategories: () => void;
     onNavigateBudgets: () => void;
+    onNavigateRecurring: () => void;
     settings: UserSettings | null;
 }
 
-const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBudgets, settings }) => {
+const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBudgets, onNavigateRecurring, settings }) => {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isInstallable, setIsInstallable] = useState(false);
     // App-lock PIN sheet: null = closed, 'set-enable' = set PIN then turn lock on, 'change' = change existing PIN
@@ -132,6 +133,18 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                                 <Target size={20} />
                             </div>
                             <span className="font-semibold text-[15px]">Budgets</span>
+                        </div>
+                        <span className="text-[13px] text-text-muted font-bold px-3 py-1 bg-slate-100 rounded-full uppercase tracking-tighter">Manage</span>
+                    </button>
+                    <button
+                        className="w-full flex items-center justify-between p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0"
+                        onClick={onNavigateRecurring}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <Repeat size={20} />
+                            </div>
+                            <span className="font-semibold text-[15px]">Recurring</span>
                         </div>
                         <span className="text-[13px] text-text-muted font-bold px-3 py-1 bg-slate-100 rounded-full uppercase tracking-tighter">Manage</span>
                     </button>

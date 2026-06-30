@@ -44,6 +44,23 @@ export interface Budget {
   period: 'monthly';
 }
 
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface RecurringTransaction {
+  id: string;
+  amount: number;
+  currency: Currency;
+  categoryId?: string;
+  accountId: string;
+  toAccountId?: string;
+  note?: string;
+  type: TransactionType;
+  fee?: number;
+  frequency: RecurringFrequency;
+  nextRunDate: string; // ISO
+  active: number; // 1 | 0 (SQLite has no boolean)
+}
+
 export type ConversionRates = Record<string, number>;
 
 export interface UserSettings {

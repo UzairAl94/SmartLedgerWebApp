@@ -114,6 +114,21 @@ class SqliteService {
                 period TEXT NOT NULL,
                 FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS recurring_transactions (
+                id TEXT PRIMARY KEY,
+                amount REAL NOT NULL,
+                currency TEXT NOT NULL,
+                categoryId TEXT,
+                accountId TEXT NOT NULL,
+                toAccountId TEXT,
+                note TEXT,
+                type TEXT NOT NULL,
+                fee REAL,
+                frequency TEXT NOT NULL,
+                nextRunDate TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            );
         `;
     }
 
