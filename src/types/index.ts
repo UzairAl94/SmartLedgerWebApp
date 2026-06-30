@@ -45,4 +45,5 @@ export interface UserSettings {
   customRates: ConversionRates;
   appLockEnabled: boolean;
   appPin?: string; // SHA-256 hash of the 4-digit PIN
+  theme: 'light' | 'dark' | 'system';
 }

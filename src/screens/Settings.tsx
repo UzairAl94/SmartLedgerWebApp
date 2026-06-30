@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
@@ -229,6 +229,32 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                                 Using default internet rates (static for demo).
                             </p>
                         )}
+                    </div>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Appearance</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm p-4 flex flex-col gap-3">
+                    <span className="font-semibold text-[15px]">Theme</span>
+                    <div className="bg-bg-primary p-1 rounded-2xl flex border border-black/5">
+                        {([
+                            { id: 'light', label: 'Light', icon: Sun },
+                            { id: 'dark', label: 'Dark', icon: Moon },
+                            { id: 'system', label: 'System', icon: Monitor },
+                        ] as const).map(opt => {
+                            const Icon = opt.icon;
+                            const active = (settings.theme || 'system') === opt.id;
+                            return (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => handleUpdateSettings({ theme: opt.id })}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-bold transition-all ${active ? 'bg-white text-primary shadow-sm' : 'text-text-muted'}`}
+                                >
+                                    <Icon size={16} /> {opt.label}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             </section>

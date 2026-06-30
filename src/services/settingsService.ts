@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     },
     appLockEnabled: false,
     appPin: undefined,
+    theme: 'system',
 };
 
 class SettingsService {

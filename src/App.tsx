@@ -113,6 +113,22 @@ const App: React.FC = () => {
     };
   }, [isDbReady]);
 
+  // Apply theme: toggle the `dark` class on <html> based on the setting.
+  useEffect(() => {
+    const theme = settings?.theme || 'system';
+    const apply = () => {
+      const isDark = theme === 'dark' ||
+        (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.classList.toggle('dark', isDark);
+    };
+    apply();
+    if (theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  }, [settings?.theme]);
+
   useEffect(() => {
     if (!settings || lockInitialized.current) return;
     lockInitialized.current = true;
