@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
-import { Search, Trash2, ChevronDown, Calendar, Filter } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Trash2, ChevronDown, Calendar, Filter, SlidersHorizontal } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import type { Transaction, Category, Account, UserSettings } from '../types';
 import { isToday, isYesterday, format, subDays, isAfter, parseISO } from 'date-fns';
 
 interface TransactionsProps {
-    transactions: Transaction[];
     categories: Category[];
     accounts: Account[];
     accountFilter?: string | null;
@@ -17,12 +16,25 @@ interface TransactionsProps {
 
 type DateRange = '7days' | '30days' | 'all';
 
-const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, accounts, accountFilter, setAccountFilter, settings, onEditTx }) => {
+const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accountFilter, setAccountFilter, settings, onEditTx }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense' | 'Transfer'>('All');
     const [dateRange, setDateRange] = useState<DateRange>('7days');
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [categoryFilter, setCategoryFilter] = useState<string>('');
+    const [minAmount, setMinAmount] = useState('');
+    const [maxAmount, setMaxAmount] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const mainCurrency = settings?.mainCurrency || 'PKR';
+
+    // Operate on the FULL transaction list, not the 50-capped subscription.
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    useEffect(() => {
+        const load = () => transactionService.getAllTransactions().then(setTransactions);
+        load();
+        const unsub = transactionService.subscribeToTransactions(() => load());
+        return unsub;
+    }, []);
 
     // 1. Filter by Date Range
     const dateFilteredTransactions = transactions.filter(t => {
@@ -37,14 +49,23 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
         ? dateFilteredTransactions.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter)
         : dateFilteredTransactions;
 
-    // 3. Filter by Type & Search
-    const finalTransactions = accountFilteredTransactions.filter(tx =>
-        (filterType === 'All' || tx.type === filterType) &&
-        (tx.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (tx.type !== 'Transfer' && categories.find((c: Category) => c.id === tx.categoryId)?.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-            (tx.type === 'Transfer' && 'transfer'.includes(searchQuery.toLowerCase()))
-        )
-    );
+    // 3. Filter by Type, Category, Amount & Search
+    const min = parseFloat(minAmount);
+    const max = parseFloat(maxAmount);
+    const finalTransactions = accountFilteredTransactions.filter(tx => {
+        if (filterType !== 'All' && tx.type !== filterType) return false;
+        if (categoryFilter && tx.categoryId !== categoryFilter) return false;
+        if (!isNaN(min) && tx.amount < min) return false;
+        if (!isNaN(max) && tx.amount > max) return false;
+
+        const q = searchQuery.toLowerCase();
+        if (!q) return true;
+        return (
+            tx.note?.toLowerCase().includes(q) ||
+            (tx.type !== 'Transfer' && categories.find((c: Category) => c.id === tx.categoryId)?.name.toLowerCase().includes(q)) ||
+            (tx.type === 'Transfer' && 'transfer'.includes(q))
+        );
+    });
 
     // Group Transactions by Date
     const groupedTransactions: Record<string, Transaction[]> = {};
@@ -114,17 +135,69 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions, categories, a
                     />
                 </div>
 
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none no-scrollbar">
-                    {['All', 'Income', 'Expense', 'Transfer'].map((type) => (
-                        <button
-                            key={type}
-                            onClick={() => setFilterType(type as any)}
-                            className={`px-5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all border ${filterType === type ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'bg-bg-secondary text-text-muted border-black/5 hover:border-text-muted'}`}
-                        >
-                            {type}
-                        </button>
-                    ))}
+                <div className="flex gap-2 items-center">
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none no-scrollbar flex-1">
+                        {['All', 'Income', 'Expense', 'Transfer'].map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type as any)}
+                                className={`px-5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all border ${filterType === type ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'bg-bg-secondary text-text-muted border-black/5 hover:border-text-muted'}`}
+                            >
+                                {type}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        onClick={() => setShowAdvanced(s => !s)}
+                        className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center border transition-all ${showAdvanced || categoryFilter || minAmount || maxAmount ? 'bg-primary text-white border-primary' : 'bg-bg-secondary text-text-muted border-black/5'}`}
+                        title="More filters"
+                    >
+                        <SlidersHorizontal size={16} />
+                    </button>
                 </div>
+
+                {showAdvanced && (
+                    <div className="flex flex-col gap-3 p-3 bg-bg-secondary rounded-2xl border border-black/5">
+                        <div className="relative">
+                            <select
+                                value={categoryFilter}
+                                onChange={(e) => setCategoryFilter(e.target.value)}
+                                className="w-full appearance-none bg-bg-primary border border-black/5 pl-3 pr-8 py-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                            >
+                                <option value="">All Categories</option>
+                                {categories.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                            <input
+                                type="number"
+                                placeholder="Min amount"
+                                value={minAmount}
+                                onChange={(e) => setMinAmount(e.target.value)}
+                                className="flex-1 bg-bg-primary border border-black/5 p-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                            <span className="text-text-muted text-[13px]">–</span>
+                            <input
+                                type="number"
+                                placeholder="Max amount"
+                                value={maxAmount}
+                                onChange={(e) => setMaxAmount(e.target.value)}
+                                className="flex-1 bg-bg-primary border border-black/5 p-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                        </div>
+                        {(categoryFilter || minAmount || maxAmount) && (
+                            <button
+                                onClick={() => { setCategoryFilter(''); setMinAmount(''); setMaxAmount(''); }}
+                                className="text-[12px] font-semibold text-primary self-start"
+                            >
+                                Clear filters
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className="bg-income/5 p-3 rounded-2xl border border-income/10 block">

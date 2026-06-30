@@ -220,7 +220,6 @@ const App: React.FC = () => {
       case 'History':
         return (
           <Transactions
-            transactions={transactions}
             categories={categories}
             accounts={accounts}
             accountFilter={accountFilter}
