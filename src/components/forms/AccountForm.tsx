@@ -1,27 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { accountService } from '../../services/accountService';
+import { transactionService } from '../../services/transactionService';
+import { convertCurrency } from '../../utils/format';
 import type { Account, AccountType, Currency } from '../../types';
 
 interface AccountFormProps {
     onSuccess: () => void;
     accounts: Account[];
+    accountToEdit?: Account | null;
 }
 
-const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts }) => {
-    const [name, setName] = useState('');
-    const [type, setType] = useState<AccountType>('Bank');
-    const [currency, setCurrency] = useState<Currency>('PKR');
-    const [balance, setBalance] = useState('');
+const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts, accountToEdit }) => {
+    const isEditMode = !!accountToEdit;
+
+    const [name, setName] = useState(accountToEdit?.name || '');
+    const [type, setType] = useState<AccountType>(accountToEdit?.type || 'Bank');
+    const [currency, setCurrency] = useState<Currency>(accountToEdit?.currency || 'PKR');
+    const [balance, setBalance] = useState(accountToEdit ? accountToEdit.initialBalance.toString() : '');
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    // Initial balance can only be edited when the account has no transactions.
+    const [canEditInitial, setCanEditInitial] = useState(!isEditMode);
+
+    useEffect(() => {
+        if (!accountToEdit) return;
+        transactionService.countForAccount(accountToEdit.id)
+            .then(count => setCanEditInitial(count === 0))
+            .catch(() => setCanEditInitial(false));
+    }, [accountToEdit]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         if (!name || !balance) return;
 
-        // Duplicate check
-        const isDuplicate = accounts.some(acc => acc.name.toLowerCase() === name.toLowerCase());
+        // Duplicate check (exclude self when editing)
+        const isDuplicate = accounts.some(acc =>
+            acc.name.toLowerCase() === name.toLowerCase() && acc.id !== accountToEdit?.id
+        );
         if (isDuplicate) {
             setError("Account name already exists");
             return;
@@ -29,18 +45,37 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts }) => {
 
         setIsSaving(true);
         try {
-            await accountService.addAccount({
-                name,
-                type,
-                currency,
-                balance: parseFloat(balance),
-                initialBalance: parseFloat(balance),
-                color: '#4f46e5' // Default color
-            });
+            if (isEditMode && accountToEdit) {
+                const updates: Partial<Account> = { name, type, currency };
+
+                // Convert stored balances when currency changes so values aren't corrupted.
+                if (currency !== accountToEdit.currency) {
+                    updates.balance = convertCurrency(accountToEdit.balance, accountToEdit.currency, currency);
+                    updates.initialBalance = convertCurrency(accountToEdit.initialBalance, accountToEdit.currency, currency);
+                }
+
+                // No transactions => balance tracks initialBalance; honor the entered value (already in selected currency).
+                if (canEditInitial) {
+                    const newInitial = parseFloat(balance);
+                    updates.initialBalance = newInitial;
+                    updates.balance = newInitial;
+                }
+
+                await accountService.updateAccount(accountToEdit.id, updates);
+            } else {
+                await accountService.addAccount({
+                    name,
+                    type,
+                    currency,
+                    balance: parseFloat(balance),
+                    initialBalance: parseFloat(balance),
+                    color: '#4f46e5' // Default color
+                });
+            }
             onSuccess();
         } catch (error) {
-            console.error("Error adding account:", error);
-            setError("Failed to add account");
+            console.error("Error saving account:", error);
+            setError(isEditMode ? "Failed to update account" : "Failed to add account");
         } finally {
             setIsSaving(false);
         }
@@ -101,11 +136,17 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts }) => {
                 <input
                     type="number"
                     placeholder="0.00"
-                    className="w-full bg-white border border-black/5 p-4 rounded-2xl text-[20px] font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    disabled={!canEditInitial}
+                    className={`w-full bg-white border border-black/5 p-4 rounded-2xl text-[20px] font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all ${!canEditInitial ? 'opacity-60 cursor-not-allowed bg-bg-primary' : ''}`}
                     value={balance}
                     onChange={(e) => setBalance(e.target.value)}
                     required
                 />
+                {isEditMode && !canEditInitial && (
+                    <span className="text-[11px] font-semibold text-text-muted px-1">
+                        Locked — account has transactions
+                    </span>
+                )}
             </div>
 
             <button
@@ -113,7 +154,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts }) => {
                 disabled={isSaving}
                 className={`w-full py-5 bg-primary text-white rounded-[1.5rem] font-bold text-[16px] shadow-lg shadow-primary/25 active:scale-95 transition-all mt-4 ${isSaving ? 'opacity-70 grayscale cursor-not-allowed' : ''}`}
             >
-                {isSaving ? 'Adding...' : 'Add Account'}
+                {isSaving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Add Account'}
             </button>
         </form>
     );

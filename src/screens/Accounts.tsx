@@ -10,11 +10,12 @@ interface AccountsProps {
     transactions: Transaction[];
     categories: Category[];
     onAddAccount: () => void;
+    onEditAccount: (account: Account) => void;
     onViewHistory: (accountId: string) => void;
     settings: UserSettings | null;
 }
 
-const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories, onAddAccount, onViewHistory, settings }) => {
+const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories, onAddAccount, onEditAccount, onViewHistory, settings }) => {
     const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
     const mainCurrency = settings?.mainCurrency || 'PKR';
 
@@ -125,6 +126,10 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                         <div className="flex gap-3">
                             <button
                                 disabled={isDeleting}
+                                onClick={() => {
+                                    onEditAccount(selectedAccount);
+                                    setSelectedAccount(null);
+                                }}
                                 className="flex-1 py-4 bg-primary text-white rounded-2xl font-bold text-[15px] shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
                             >
                                 Edit Account

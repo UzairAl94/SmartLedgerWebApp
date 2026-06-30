@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS: UserSettings = {
     },
     elevenLabsApiKey: import.meta.env.VITE_ELEVEN_LABS_API_KEY,
     deepSeekApiKey: import.meta.env.VITE_DEEPSEEK_API_KEY,
+    appLockEnabled: false,
+    appPin: undefined,
 };
 
 class SettingsService {

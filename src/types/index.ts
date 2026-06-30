@@ -45,4 +45,6 @@ export interface UserSettings {
   customRates: ConversionRates;
   elevenLabsApiKey?: string;
   deepSeekApiKey?: string;
+  appLockEnabled: boolean;
+  appPin?: string; // 4-digit PIN
 }

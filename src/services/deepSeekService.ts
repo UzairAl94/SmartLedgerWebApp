@@ -32,7 +32,10 @@ Rules:
 - Allowed currencies: PKR, USD, AED, MYR (default: PKR if not mentioned)
 - Detect currency from keywords: "dollars"/"usd" → USD, "dirhams"/"aed" → AED, "rupees"/"pkr" → PKR, "ringgit"/"myr" → MYR
 - **IMPORTANT**: category and account names MUST be in "Proper Case" (e.g., "Salary", "Food", "Cash").
-- Favor matching input to the 'Existing Accounts' and 'Existing Categories' provided above. If a match is close, use the exact name from the list.
+- **MATCHING (critical)**: If the spoken account or category is an abbreviation, partial name, initials, misspelling, or fuzzy variant of an entry in 'Existing Accounts' / 'Existing Categories', you MUST return that entry's EXACT full name verbatim from the list.
+  - Match case-insensitively, on substrings and initials. Examples: "UBL" → "UBL Bank", "meezan" → "Meezan Bank", "hbl" → "HBL Savings", "grocery" / "groceries" → "Groceries", "uber" → "Transport" (if that is the closest existing category).
+  - Always prefer an existing list entry over inventing a new name.
+  - Only output a new name (not in the list) when NO reasonable match exists.
 - Notes are free-form text (string or null)
 - Never guess missing values
 

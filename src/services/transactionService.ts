@@ -1,5 +1,6 @@
 import { sqliteService } from './sqliteService';
 import { accountService } from './accountService';
+import { settingsService } from './settingsService';
 import { convertCurrency } from '../utils/format';
 import type { Transaction, Account } from '../types';
 
@@ -40,9 +41,18 @@ class TransactionService {
         return (result.values || []) as Transaction[];
     }
 
+    // Count transactions touching an account (as source or transfer destination).
+    // Two single-column queries because the web provider only supports a single `WHERE col = ?`.
+    async countForAccount(accountId: string): Promise<number> {
+        const fromResult = await sqliteService.query('SELECT * FROM transactions WHERE accountId = ?', [accountId]);
+        const toResult = await sqliteService.query('SELECT * FROM transactions WHERE toAccountId = ?', [accountId]);
+        return (fromResult.values?.length || 0) + (toResult.values?.length || 0);
+    }
+
     // Add transaction and update account balance atomically
     async createTransaction(tx: Omit<Transaction, 'id'>) {
         const id = crypto.randomUUID();
+        const { customRates, useCustomRates } = await settingsService.getSettings();
 
         console.log('Creating transaction for account:', tx.accountId);
 
@@ -61,8 +71,8 @@ class TransactionService {
             const accountData = accountResult.values[0] as Account;
 
             // Convert transaction amount to account currency for balance update
-            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency);
-            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency) : 0;
+            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency, customRates, useCustomRates);
+            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency, customRates, useCustomRates) : 0;
 
             let newBalance = accountData.balance;
             if (tx.type === 'Income') {
@@ -87,7 +97,7 @@ class TransactionService {
                     throw new Error("Destination account does not exist!");
                 }
                 const toAccountData = toAccountResult.values[0] as Account;
-                const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency);
+                const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency, customRates, useCustomRates);
                 const newToBalance = toAccountData.balance + amountInToAccountCurrency;
                 await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, tx.toAccountId]);
             }
@@ -100,6 +110,7 @@ class TransactionService {
 
     // Delete transaction and revert account balance atomically
     async deleteTransaction(tx: Transaction) {
+        const { customRates, useCustomRates } = await settingsService.getSettings();
         await sqliteService.transaction(async (db) => {
             const accountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.accountId]);
             if (!accountResult.values || accountResult.values.length === 0) {
@@ -107,8 +118,8 @@ class TransactionService {
             }
             const accountData = accountResult.values[0] as Account;
 
-            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency);
-            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency) : 0;
+            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency, customRates, useCustomRates);
+            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency, customRates, useCustomRates) : 0;
 
             let newBalance = accountData.balance;
             if (tx.type === 'Income') {
@@ -128,7 +139,7 @@ class TransactionService {
                 const toAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.toAccountId]);
                 if (toAccountResult.values && toAccountResult.values.length > 0) {
                     const toAccountData = toAccountResult.values[0] as Account;
-                    const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency);
+                    const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency, customRates, useCustomRates);
                     const newToBalance = toAccountData.balance - amountInToAccountCurrency;
                     await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, tx.toAccountId]);
                 }
@@ -140,13 +151,14 @@ class TransactionService {
     }
 
     async updateTransaction(oldTx: Transaction, newTxData: Omit<Transaction, 'id'>) {
+        const { customRates, useCustomRates } = await settingsService.getSettings();
         await sqliteService.transaction(async (db) => {
             // 1. Revert old transaction impact
             const oldAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [oldTx.accountId]);
             if (oldAccountResult.values && oldAccountResult.values.length > 0) {
                 const oldAccountData = oldAccountResult.values[0] as Account;
-                const oldAmountInAccountCurrency = convertCurrency(oldTx.amount, oldTx.currency, oldAccountData.currency);
-                const oldFeeInAccountCurrency = oldTx.fee ? convertCurrency(oldTx.fee, oldTx.currency, oldAccountData.currency) : 0;
+                const oldAmountInAccountCurrency = convertCurrency(oldTx.amount, oldTx.currency, oldAccountData.currency, customRates, useCustomRates);
+                const oldFeeInAccountCurrency = oldTx.fee ? convertCurrency(oldTx.fee, oldTx.currency, oldAccountData.currency, customRates, useCustomRates) : 0;
 
                 let revertedBalance = oldAccountData.balance;
                 if (oldTx.type === 'Income') {
@@ -161,7 +173,7 @@ class TransactionService {
                     const oldToAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [oldTx.toAccountId]);
                     if (oldToAccountResult.values && oldToAccountResult.values.length > 0) {
                         const oldToAccountData = oldToAccountResult.values[0] as Account;
-                        const oldAmountInToAccountCurrency = convertCurrency(oldTx.amount, oldTx.currency, oldToAccountData.currency);
+                        const oldAmountInToAccountCurrency = convertCurrency(oldTx.amount, oldTx.currency, oldToAccountData.currency, customRates, useCustomRates);
                         const newToBalance = oldToAccountData.balance - oldAmountInToAccountCurrency;
                         await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, oldTx.toAccountId]);
                     }
@@ -181,8 +193,8 @@ class TransactionService {
                 const refreshedAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [newTxData.accountId]);
                 const newAccountData = refreshedAccountResult.values![0] as Account;
 
-                const newAmountInAccountCurrency = convertCurrency(newTxData.amount, newTxData.currency, newAccountData.currency);
-                const newFeeInAccountCurrency = newTxData.fee ? convertCurrency(newTxData.fee, newTxData.currency, newAccountData.currency) : 0;
+                const newAmountInAccountCurrency = convertCurrency(newTxData.amount, newTxData.currency, newAccountData.currency, customRates, useCustomRates);
+                const newFeeInAccountCurrency = newTxData.fee ? convertCurrency(newTxData.fee, newTxData.currency, newAccountData.currency, customRates, useCustomRates) : 0;
 
                 let finalBalance = newAccountData.balance;
                 if (newTxData.type === 'Income') {
@@ -197,7 +209,7 @@ class TransactionService {
                     const newToAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [newTxData.toAccountId]);
                     if (newToAccountResult.values && newToAccountResult.values.length > 0) {
                         const newToAccountData = newToAccountResult.values[0] as Account;
-                        const newAmountInToAccountCurrency = convertCurrency(newTxData.amount, newTxData.currency, newToAccountData.currency);
+                        const newAmountInToAccountCurrency = convertCurrency(newTxData.amount, newTxData.currency, newToAccountData.currency, customRates, useCustomRates);
                         const finalToBalance = newToAccountData.balance + newAmountInToAccountCurrency;
                         await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [finalToBalance, newTxData.toAccountId]);
                     }
@@ -207,6 +219,46 @@ class TransactionService {
 
         await this.fetchAndNotify();
         await (accountService as any).fetchAndNotify(); // Refresh accounts too
+    }
+
+    // Reconcile every account's stored balance from scratch:
+    // balance = initialBalance + sum of its transactions. Fixes any drift in the
+    // denormalized balance caused by interrupted writes or past bugs.
+    async recalculateBalances() {
+        const { customRates, useCustomRates } = await settingsService.getSettings();
+
+        const accountsResult = await sqliteService.query('SELECT * FROM accounts');
+        const accounts = (accountsResult.values || []) as Account[];
+        const txResult = await sqliteService.query('SELECT * FROM transactions');
+        const txs = (txResult.values || []) as Transaction[];
+
+        await sqliteService.transaction(async (db) => {
+            for (const acc of accounts) {
+                let balance = acc.initialBalance;
+
+                for (const tx of txs) {
+                    // Source side (income adds, expense/transfer subtract; fee always subtracts)
+                    if (tx.accountId === acc.id) {
+                        const amount = convertCurrency(tx.amount, tx.currency, acc.currency, customRates, useCustomRates);
+                        const fee = tx.fee ? convertCurrency(tx.fee, tx.currency, acc.currency, customRates, useCustomRates) : 0;
+                        if (tx.type === 'Income') {
+                            balance += amount - fee;
+                        } else {
+                            balance -= amount + fee;
+                        }
+                    }
+                    // Transfer destination side (amount added, no fee)
+                    if (tx.type === 'Transfer' && tx.toAccountId === acc.id) {
+                        balance += convertCurrency(tx.amount, tx.currency, acc.currency, customRates, useCustomRates);
+                    }
+                }
+
+                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [balance, acc.id]);
+            }
+        });
+
+        await this.fetchAndNotify();
+        await (accountService as any).fetchAndNotify();
     }
 }
 

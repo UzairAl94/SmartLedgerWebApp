@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
+import { transactionService } from '../services/transactionService';
+import BottomSheet from '../components/ui/BottomSheet';
+import PinSetup from '../components/security/PinSetup';
 import type { UserSettings } from '../types';
 
 interface SettingsProps {
@@ -13,6 +16,9 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) => {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isInstallable, setIsInstallable] = useState(false);
+    // App-lock PIN sheet: null = closed, 'set-enable' = set PIN then turn lock on, 'change' = change existing PIN
+    const [pinSheet, setPinSheet] = useState<null | 'set-enable' | 'change'>(null);
+    const [recomputing, setRecomputing] = useState(false);
 
     useEffect(() => {
         const handler = (e: any) => {
@@ -51,9 +57,32 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
         });
     };
 
+    const handleToggleAppLock = (enabled: boolean) => {
+        if (!enabled) {
+            handleUpdateSettings({ appLockEnabled: false });
+            return;
+        }
+        // Turning on: require a PIN first
+        if (settings?.appPin) {
+            handleUpdateSettings({ appLockEnabled: true });
+        } else {
+            setPinSheet('set-enable');
+        }
+    };
+
+    const handlePinSaved = (pin: string) => {
+        if (pinSheet === 'set-enable') {
+            handleUpdateSettings({ appPin: pin, appLockEnabled: true });
+        } else if (pinSheet === 'change') {
+            handleUpdateSettings({ appPin: pin });
+        }
+        setPinSheet(null);
+    };
+
     if (!settings) return null;
 
     return (
+        <>
         <div className="flex flex-col gap-6 pb-8 px-1">
             <section className="flex flex-col gap-3">
                 <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">General</h3>
@@ -182,6 +211,47 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
             </section>
 
             <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Security</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between p-4 border-b border-black/5 last:border-0">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                <Lock size={20} />
+                            </div>
+                            <div>
+                                <span className="block font-semibold text-[15px]">App Lock</span>
+                                <span className="text-[12px] text-text-muted">Require a 4-digit PIN on launch</span>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={settings.appLockEnabled}
+                                onChange={(e) => handleToggleAppLock(e.target.checked)}
+                                className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+
+                    {settings.appPin && (
+                        <button
+                            onClick={() => setPinSheet('change')}
+                            className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0"
+                        >
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-50 text-amber-600">
+                                <KeyRound size={20} />
+                            </div>
+                            <div className="flex-1 text-left">
+                                <span className="block font-semibold text-[15px]">Change PIN</span>
+                                <span className="text-[12px] text-text-muted">Update your 4-digit PIN</span>
+                            </div>
+                        </button>
+                    )}
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
                 <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Data Management</h3>
                 <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
                     <button
@@ -238,6 +308,30 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                             </div>
                         </div>
                     </div>
+
+                    <button
+                        disabled={recomputing}
+                        onClick={async () => {
+                            setRecomputing(true);
+                            try {
+                                await transactionService.recalculateBalances();
+                                alert('Account balances recalculated from transactions.');
+                            } catch (error) {
+                                alert('Recompute failed: ' + (error instanceof Error ? error.message : String(error)));
+                            } finally {
+                                setRecomputing(false);
+                            }
+                        }}
+                        className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0 disabled:opacity-50"
+                    >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-600">
+                            <RefreshCw size={20} className={recomputing ? 'animate-spin' : ''} />
+                        </div>
+                        <div className="flex-1 text-left">
+                            <span className="block font-semibold text-[15px]">Recompute Balances</span>
+                            <span className="text-[12px] text-text-muted">Fix balance drift from transactions</span>
+                        </div>
+                    </button>
                 </div>
             </section>
 
@@ -279,6 +373,15 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                 <div className="text-[12px] font-bold text-text-muted uppercase tracking-widest">Version 1.0.0 (Beta)</div>
             </div>
         </div>
+
+        <BottomSheet
+            isOpen={pinSheet !== null}
+            onClose={() => setPinSheet(null)}
+            title={pinSheet === 'change' ? 'Change PIN' : 'Set App PIN'}
+        >
+            <PinSetup key={pinSheet || 'closed'} onComplete={handlePinSaved} />
+        </BottomSheet>
+        </>
     );
 };
 

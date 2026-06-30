@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronDown } from 'lucide-react';
 import type { Transaction, Category, UserSettings } from '../types';
 import { formatCurrency, convertCurrency } from '../utils/format';
+import { transactionService } from '../services/transactionService';
 import {
     subDays,
     startOfMonth,
@@ -23,16 +24,25 @@ import {
 } from 'date-fns';
 
 interface AnalyticsProps {
-    transactions: Transaction[];
     categories: Category[];
     settings: UserSettings | null;
 }
 
 type DateRange = '7days' | '30days' | 'thisMonth' | 'lastMonth' | '6Months' | 'Year';
 
-const Analytics: React.FC<AnalyticsProps> = ({ transactions, categories, settings }) => {
+const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
     const [dateRange, setDateRange] = useState<DateRange>('7days');
     const mainCurrency = settings?.mainCurrency || 'PKR';
+
+    // Analytics must operate on ALL transactions, not the 50-capped subscription list.
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    useEffect(() => {
+        const load = () => transactionService.getAllTransactions().then(setTransactions);
+        load();
+        // Re-fetch the full list whenever transactions change anywhere in the app.
+        const unsub = transactionService.subscribeToTransactions(() => load());
+        return unsub;
+    }, []);
 
     // 1. Determine Date Range Metadata
     const { startDate, endDate, periodType } = useMemo(() => {

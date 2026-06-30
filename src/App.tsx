@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MobileLayout from './components/layout/MobileLayout';
 import Dashboard from './screens/Dashboard';
 import Accounts from './screens/Accounts';
@@ -17,6 +17,7 @@ import { settingsService } from './services/settingsService';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
 import { sqliteService } from './services/sqliteService';
+import LockScreen from './components/security/LockScreen';
 import { Cloud, Loader2 } from 'lucide-react';
 import type { Account, Transaction, Category, UserSettings } from './types';
 
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [initialCategoryType, setInitialCategoryType] = useState<'Expense' | 'Income'>('Expense');
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
 
   // Real Data State
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -38,6 +40,11 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDbReady, setIsDbReady] = useState(false);
+
+  // App lock: decide once when settings first load, so toggling lock mid-session
+  // doesn't lock the user out until the next launch.
+  const [isLocked, setIsLocked] = useState(false);
+  const lockInitialized = useRef(false);
 
   // Navigation State
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
@@ -102,6 +109,14 @@ const App: React.FC = () => {
     };
   }, [isDbReady]);
 
+  useEffect(() => {
+    if (!settings || lockInitialized.current) return;
+    lockInitialized.current = true;
+    if (settings.appLockEnabled && settings.appPin) {
+      setIsLocked(true);
+    }
+  }, [settings]);
+
   const handleVoiceResult = (text: string) => {
     setVoiceResult(text);
     setProcessingError(null);
@@ -159,6 +174,11 @@ const App: React.FC = () => {
     setIsAddTxOpen(true);
   };
 
+  const handleEditAccount = (account: Account) => {
+    setAccountToEdit(account);
+    setIsAddAccountOpen(true);
+  };
+
   const renderScreen = () => {
     switch (activeTab) {
       case 'Home':
@@ -183,7 +203,11 @@ const App: React.FC = () => {
             accounts={accounts}
             transactions={transactions}
             categories={categories}
-            onAddAccount={() => setIsAddAccountOpen(true)}
+            onAddAccount={() => {
+              setAccountToEdit(null);
+              setIsAddAccountOpen(true);
+            }}
+            onEditAccount={handleEditAccount}
             onViewHistory={handleViewAccountHistory}
             settings={settings}
           />
@@ -201,7 +225,7 @@ const App: React.FC = () => {
           />
         );
       case 'Insights':
-        return <Analytics transactions={transactions} categories={categories} settings={settings} />;
+        return <Analytics categories={categories} settings={settings} />;
       case 'Settings':
         return <Settings onNavigateCategories={() => setActiveTab('Categories')} settings={settings} />;
       case 'Categories':
@@ -244,6 +268,10 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (isLocked && settings?.appPin) {
+    return <LockScreen pin={settings.appPin} onUnlock={() => setIsLocked(false)} />;
   }
 
   return (
@@ -331,12 +359,20 @@ const App: React.FC = () => {
 
       <BottomSheet
         isOpen={isAddAccountOpen}
-        onClose={() => setIsAddAccountOpen(false)}
-        title="New Account"
+        onClose={() => {
+          setIsAddAccountOpen(false);
+          setAccountToEdit(null);
+        }}
+        title={accountToEdit ? "Edit Account" : "New Account"}
       >
         <AccountForm
-          onSuccess={() => setIsAddAccountOpen(false)}
+          key={accountToEdit?.id || 'new'}
+          onSuccess={() => {
+            setIsAddAccountOpen(false);
+            setAccountToEdit(null);
+          }}
           accounts={accounts}
+          accountToEdit={accountToEdit}
         />
       </BottomSheet>
 

@@ -9,6 +9,28 @@ export class LedgerValidationError extends Error {
     }
 }
 
+/**
+ * Resolve a spoken/parsed name against a list of items by their `name`.
+ * 1) exact case-insensitive match, then
+ * 2) fuzzy fallback: stored name contains the token or vice-versa.
+ * Returns undefined if no match, or if the fuzzy match is ambiguous (multiple hits).
+ */
+const resolveByName = <T extends { name: string }>(items: T[], rawName: string | null): T | undefined => {
+    const token = (rawName || '').toLowerCase().trim();
+    if (!token) return undefined;
+
+    // 1. Exact (case-insensitive)
+    const exact = items.find(i => i.name.toLowerCase().trim() === token);
+    if (exact) return exact;
+
+    // 2. Fuzzy: substring either direction
+    const fuzzy = items.filter(i => {
+        const name = i.name.toLowerCase().trim();
+        return name.includes(token) || token.includes(name);
+    });
+    return fuzzy.length === 1 ? fuzzy[0] : undefined;
+};
+
 export const ledgerEngine = {
     /**
      * Process a parsed transaction and save it to the database
@@ -42,9 +64,8 @@ export const ledgerEngine = {
         accounts: Account[],
         categories: Category[]
     ): Promise<Transaction> => {
-        // Find account
-        const accountName = (parsed.account || '').toLowerCase().trim();
-        const account = accounts.find(a => a.name.toLowerCase() === accountName);
+        // Find account (exact, then fuzzy fallback)
+        const account = resolveByName(accounts, parsed.account);
 
         if (!account) {
             throw new LedgerValidationError(
@@ -52,12 +73,9 @@ export const ledgerEngine = {
             );
         }
 
-        // Find category
-        const categoryName = (parsed.category || '').toLowerCase().trim();
-        const category = categories.find(c =>
-            c.name.toLowerCase() === categoryName &&
-            c.type === (parsed.type === 'income' ? 'Income' : 'Expense')
-        );
+        // Find category (filter by type, then exact/fuzzy match)
+        const expectedType = parsed.type === 'income' ? 'Income' : 'Expense';
+        const category = resolveByName(categories.filter(c => c.type === expectedType), parsed.category);
 
         if (!category) {
             throw new LedgerValidationError(
@@ -88,9 +106,8 @@ export const ledgerEngine = {
         parsed: ParsedTransaction,
         accounts: Account[]
     ): Promise<Transaction> => {
-        // Find from account
-        const fromAccountName = (parsed.fromAccount || '').toLowerCase().trim();
-        const fromAccount = accounts.find(a => a.name.toLowerCase() === fromAccountName);
+        // Find from account (exact, then fuzzy fallback)
+        const fromAccount = resolveByName(accounts, parsed.fromAccount);
 
         if (!fromAccount) {
             throw new LedgerValidationError(
@@ -98,9 +115,8 @@ export const ledgerEngine = {
             );
         }
 
-        // Find to account
-        const toAccountName = (parsed.toAccount || '').toLowerCase().trim();
-        const toAccount = accounts.find(a => a.name.toLowerCase() === toAccountName);
+        // Find to account (exact, then fuzzy fallback)
+        const toAccount = resolveByName(accounts, parsed.toAccount);
 
         if (!toAccount) {
             throw new LedgerValidationError(
