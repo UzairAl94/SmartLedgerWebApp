@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Paperclip, Download, X } from 'lucide-react';
+import { Paperclip, Download, X, Trash2 } from 'lucide-react';
 import { transactionService } from '../../services/transactionService';
 import { receiptService } from '../../services/receiptService';
 import type { TransactionType, Category, Account, Currency, Transaction } from '../../types';
@@ -20,6 +20,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
     const [accountId, setAccountId] = useState(transactionToEdit?.accountId || '');
     const [note, setNote] = useState(transactionToEdit?.note || '');
     const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [toAccountId, setToAccountId] = useState(transactionToEdit?.toAccountId || '');
     const [fee, setFee] = useState(transactionToEdit?.fee?.toString() || '');
     const [showFee, setShowFee] = useState(!!transactionToEdit?.fee);
@@ -128,6 +129,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
             alert("Failed to save transaction. Check console.");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!transactionToEdit) return;
+        if (!window.confirm('Delete this transaction? This will update your account balance and cannot be undone.')) return;
+        setIsDeleting(true);
+        try {
+            await transactionService.deleteTransaction(transactionToEdit);
+            onSuccess();
+        } catch (error) {
+            console.error('Error deleting transaction:', error);
+            alert('Failed to delete transaction.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -324,6 +340,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
             >
                 {isSaving ? 'Saving...' : 'Save Transaction'}
             </button>
+
+            {isEditMode && (
+                <button
+                    onClick={handleDelete}
+                    disabled={isDeleting || isSaving}
+                    className="w-full py-3.5 bg-expense/10 text-expense rounded-2xl font-bold text-[14px] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    <Trash2 size={18} /> {isDeleting ? 'Deleting...' : 'Delete Transaction'}
+                </button>
+            )}
         </div>
     );
 };
