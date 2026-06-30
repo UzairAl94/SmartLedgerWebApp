@@ -27,23 +27,29 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
     const [deepSeekKey, setDeepSeekKey] = useState('');
     const [elevenKey, setElevenKey] = useState('');
     const [keysSaving, setKeysSaving] = useState(false);
-    const [keysSaved, setKeysSaved] = useState(false);
+    const [keysLocked, setKeysLocked] = useState(true);
 
-    useEffect(() => {
+    const loadKeys = () => {
         secretsService.getKey(SECRET_KEYS.deepSeek).then(k => setDeepSeekKey(k || ''));
         secretsService.getKey(SECRET_KEYS.elevenLabs).then(k => setElevenKey(k || ''));
-    }, []);
+    };
+
+    useEffect(() => { loadKeys(); }, []);
 
     const handleSaveKeys = async () => {
         setKeysSaving(true);
         try {
             await secretsService.setKey(SECRET_KEYS.deepSeek, deepSeekKey.trim());
             await secretsService.setKey(SECRET_KEYS.elevenLabs, elevenKey.trim());
-            setKeysSaved(true);
-            setTimeout(() => setKeysSaved(false), 2000);
+            setKeysLocked(true);
         } finally {
             setKeysSaving(false);
         }
+    };
+
+    const handleCancelKeys = () => {
+        loadKeys(); // discard edits
+        setKeysLocked(true);
     };
 
     useEffect(() => {
@@ -338,8 +344,9 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             type="password"
                             placeholder="sk-..."
                             value={deepSeekKey}
+                            disabled={keysLocked}
                             onChange={(e) => setDeepSeekKey(e.target.value)}
-                            className="w-full bg-bg-primary border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                            className={`w-full border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none ${keysLocked ? 'bg-bg-primary opacity-60' : 'bg-white'}`}
                         />
                     </div>
                     <div className="flex flex-col gap-2">
@@ -350,17 +357,36 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             type="password"
                             placeholder="Enter API key"
                             value={elevenKey}
+                            disabled={keysLocked}
                             onChange={(e) => setElevenKey(e.target.value)}
-                            className="w-full bg-bg-primary border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                            className={`w-full border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none ${keysLocked ? 'bg-bg-primary opacity-60' : 'bg-white'}`}
                         />
                     </div>
-                    <button
-                        onClick={handleSaveKeys}
-                        disabled={keysSaving}
-                        className="w-full py-3 bg-primary text-white rounded-xl font-bold text-[14px] active:scale-95 transition-all disabled:opacity-50"
-                    >
-                        {keysSaving ? 'Saving...' : keysSaved ? 'Saved ✓' : 'Save Keys'}
-                    </button>
+                    {keysLocked ? (
+                        <button
+                            onClick={() => setKeysLocked(false)}
+                            className="w-full py-3 bg-bg-primary border border-black/5 text-text-primary rounded-xl font-bold text-[14px] active:scale-95 transition-all flex items-center justify-center gap-2"
+                        >
+                            <KeyRound size={16} /> Edit Keys
+                        </button>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleCancelKeys}
+                                disabled={keysSaving}
+                                className="flex-1 py-3 bg-bg-primary text-text-secondary rounded-xl font-bold text-[14px] active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveKeys}
+                                disabled={keysSaving}
+                                className="flex-1 py-3 bg-primary text-white rounded-xl font-bold text-[14px] active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {keysSaving ? 'Saving...' : 'Save Keys'}
+                            </button>
+                        </div>
+                    )}
                     <p className="text-[11px] text-text-muted">
                         Stored in your device's secure storage, never in backups.
                     </p>

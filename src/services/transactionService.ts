@@ -84,8 +84,8 @@ class TransactionService {
 
             // Create the transaction record
             await db.run(
-                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null]
+                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0]
             );
 
             // Update source account balance
@@ -186,8 +186,8 @@ class TransactionService {
 
             // 2. Update the transaction record
             await db.run(
-                'UPDATE transactions SET amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?, note = ?, type = ?, fee = ?, receiptPath = ? WHERE id = ?',
-                [newTxData.amount, newTxData.currency, newTxData.categoryId || null, newTxData.accountId, newTxData.toAccountId || null, newTxData.date, newTxData.note || null, newTxData.type, newTxData.fee || null, newTxData.receiptPath || null, oldTx.id]
+                'UPDATE transactions SET amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?, note = ?, type = ?, fee = ?, receiptPath = ?, hidden = ? WHERE id = ?',
+                [newTxData.amount, newTxData.currency, newTxData.categoryId || null, newTxData.accountId, newTxData.toAccountId || null, newTxData.date, newTxData.note || null, newTxData.type, newTxData.fee || null, newTxData.receiptPath || null, newTxData.hidden ? 1 : 0, oldTx.id]
             );
 
             // 3. Apply new transaction impact

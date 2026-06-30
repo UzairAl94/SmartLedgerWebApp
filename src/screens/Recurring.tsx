@@ -99,6 +99,7 @@ const RecurringForm: React.FC<RecurringFormProps> = ({ categories, accounts, onS
     const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
     const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [note, setNote] = useState('');
+    const [hideAmount, setHideAmount] = useState(false);
     const [saving, setSaving] = useState(false);
 
     const typeCategories = categories.filter(c => c.type === type);
@@ -120,6 +121,7 @@ const RecurringForm: React.FC<RecurringFormProps> = ({ categories, accounts, onS
                 frequency,
                 nextRunDate: new Date(startDate).toISOString(),
                 active: 1,
+                hidden: hideAmount ? 1 : 0,
             });
             onSuccess();
         } finally {
@@ -179,6 +181,12 @@ const RecurringForm: React.FC<RecurringFormProps> = ({ categories, accounts, onS
             </div>
 
             <input type="text" placeholder="Note (optional)" value={note} onChange={e => setNote(e.target.value)} className={inputCls} />
+
+            <label className="flex items-center justify-between bg-white border border-black/5 p-3.5 rounded-2xl cursor-pointer">
+                <span className="text-[14px] font-semibold">Hide amount</span>
+                <input type="checkbox" checked={hideAmount} onChange={e => setHideAmount(e.target.checked)} className="sr-only peer" />
+                <div className="relative w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
 
             <button
                 onClick={handleSave}

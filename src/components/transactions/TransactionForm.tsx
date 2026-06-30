@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Paperclip, Download, X, Trash2 } from 'lucide-react';
+import { Paperclip, Download, X, Trash2, EyeOff } from 'lucide-react';
 import { transactionService } from '../../services/transactionService';
 import { receiptService } from '../../services/receiptService';
 import type { TransactionType, Category, Account, Currency, Transaction } from '../../types';
@@ -25,6 +25,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
     const [fee, setFee] = useState(transactionToEdit?.fee?.toString() || '');
     const [showFee, setShowFee] = useState(!!transactionToEdit?.fee);
     const [currency, setCurrency] = useState<Currency>(transactionToEdit?.currency || 'PKR');
+    const [hideAmount, setHideAmount] = useState(!!transactionToEdit?.hidden);
     const [receiptPath, setReceiptPath] = useState(transactionToEdit?.receiptPath || '');
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null);
     const [receiptBusy, setReceiptBusy] = useState(false);
@@ -116,6 +117,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                 categoryId: type === 'Transfer' ? null : categoryId,
                 toAccountId: type === 'Transfer' ? toAccountId : null,
                 receiptPath: receiptPath || null,
+                hidden: hideAmount ? 1 : 0,
             };
 
             if (isEditMode && transactionToEdit) {
@@ -331,6 +333,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                         <Paperclip size={18} /> {receiptBusy ? 'Opening…' : 'Attach Receipt'}
                     </button>
                 )}
+            </div>
+
+            <div className="flex items-center justify-between bg-white border border-black/5 p-4 rounded-2xl">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-bg-primary text-text-muted flex items-center justify-center">
+                        <EyeOff size={18} />
+                    </div>
+                    <div>
+                        <span className="block font-semibold text-[14px]">Hide amount</span>
+                        <span className="text-[12px] text-text-muted">Masked in lists; still counted in totals</span>
+                    </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={hideAmount} onChange={(e) => setHideAmount(e.target.checked)} className="sr-only peer" />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </label>
             </div>
 
             <button

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { formatCurrency, convertCurrency } from '../utils/format';
+import { isAmountHidden, MASK } from '../utils/visibility';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import type { Account, Transaction, Category, UserSettings } from '../types';
 
@@ -159,7 +160,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
                                     </div>
                                 </div>
                                 <div className={`font-bold text-[15px] ${tx.type === 'Income' ? 'text-income' : tx.type === 'Expense' ? 'text-text-primary' : 'text-blue-600'}`}>
-                                    {tx.type === 'Income' ? '+' : '-'} {formatCurrency(tx.amount, tx.currency)}
+                                    {tx.type === 'Income' ? '+' : '-'} {isAmountHidden(tx, categories) ? MASK : formatCurrency(tx.amount, tx.currency)}
                                 </div>
                                 <button
                                     onClick={(e) => {

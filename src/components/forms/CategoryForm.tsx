@@ -12,6 +12,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ onSuccess, categories, init
     const [name, setName] = useState('');
     const [type, setType] = useState<TransactionType>(initialType);
     const [color, setColor] = useState('#4f46e5');
+    const [hidden, setHidden] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -40,7 +41,8 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ onSuccess, categories, init
                 name,
                 type,
                 color,
-                icon: 'Tag' // Default icon
+                icon: 'Tag', // Default icon
+                hidden: hidden ? 1 : 0,
             });
             onSuccess();
         } catch (error) {
@@ -110,6 +112,12 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ onSuccess, categories, init
                     ))}
                 </div>
             </div>
+
+            <label className="flex items-center justify-between bg-white border border-black/5 p-4 rounded-2xl cursor-pointer">
+                <span className="text-[14px] font-semibold">Hide amounts in this category</span>
+                <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} className="sr-only peer" />
+                <div className="relative w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
 
             <button
                 type="submit"

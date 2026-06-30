@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { categoryService } from '../services/categoryService';
 import type { Category, Transaction } from '../types';
 
@@ -55,7 +55,7 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
                             </div>
                             <div className="flex-1">
                                 <span className="block font-semibold text-[15px]">{cat.name}</span>
-                                <span className="text-[12px] text-text-muted font-medium">Standard Category</span>
+                                <span className="text-[12px] text-text-muted font-medium">{cat.hidden ? 'Amounts hidden' : 'Standard Category'}</span>
                             </div>
                             <button
                                 disabled={!!deletingId}
@@ -85,9 +85,16 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
                             >
                                 {deletingId === cat.id ? <div className="w-4 h-4 border-2 border-expense/20 border-t-expense rounded-full animate-spin"></div> : <Trash2 size={16} />}
                             </button>
-                            <div className="w-9 h-9 rounded-xl bg-bg-primary border border-black/5 flex items-center justify-center text-text-muted">
-                                <Search size={14} strokeWidth={2.5} />
-                            </div>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    categoryService.setHidden(cat.id, !cat.hidden);
+                                }}
+                                className={`w-9 h-9 rounded-xl border border-black/5 flex items-center justify-center transition-all ${cat.hidden ? 'bg-primary-light text-primary' : 'bg-bg-primary text-text-muted'}`}
+                                title={cat.hidden ? 'Amounts hidden — tap to show' : 'Hide amounts in this category'}
+                            >
+                                {cat.hidden ? <EyeOff size={15} strokeWidth={2.5} /> : <Eye size={15} strokeWidth={2.5} />}
+                            </button>
                         </div>
                     ))}
                 </div>

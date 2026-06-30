@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Banknote, Trash2 } from 'lucide-react';
 import { accountService } from '../services/accountService';
 import { formatCurrency, convertCurrency } from '../utils/format';
+import { isAmountHidden, MASK } from '../utils/visibility';
 import type { Account, Transaction, Category, UserSettings } from '../types';
 import BottomSheet from '../components/ui/BottomSheet';
 
@@ -115,7 +116,7 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                                                     <span className="text-[11px] text-text-muted">{tx.date}</span>
                                                 </div>
                                                 <div className={`text-[13px] font-bold ${tx.type === 'Income' ? 'text-income' : 'text-text-primary'}`}>
-                                                    {tx.type === 'Income' ? '+' : '-'} {tx.amount}
+                                                    {tx.type === 'Income' ? '+' : '-'} {isAmountHidden(tx, categories) ? MASK : tx.amount}
                                                 </div>
                                             </div>
                                         );

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Pencil, ChevronDown, Calendar, Filter, SlidersHorizontal } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, convertCurrency } from '../utils/format';
+import { isAmountHidden, MASK } from '../utils/visibility';
 import type { Transaction, Category, Account, UserSettings } from '../types';
 import { isToday, isYesterday, format, subDays, isAfter, parseISO } from 'date-fns';
 
@@ -259,7 +260,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
                                                 </div>
                                             </div>
                                             <div className={`font-bold text-[15px] ${tx.type === 'Income' ? 'text-income' : tx.type === 'Expense' ? 'text-text-primary' : 'text-blue-600'}`}>
-                                                {tx.type === 'Income' ? '+' : '-'} {formatCurrency(tx.amount, tx.currency)}
+                                                {tx.type === 'Income' ? '+' : '-'} {isAmountHidden(tx, categories) ? MASK : formatCurrency(tx.amount, tx.currency)}
                                             </div>
                                             <button
                                                 onClick={(e) => {

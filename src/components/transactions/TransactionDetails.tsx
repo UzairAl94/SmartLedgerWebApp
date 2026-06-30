@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Pencil, Download, X, Paperclip } from 'lucide-react';
+import { Pencil, Download, X, Paperclip, Eye, EyeOff } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '../../utils/format';
+import { isAmountHidden, MASK } from '../../utils/visibility';
 import { receiptService } from '../../services/receiptService';
 import BottomSheet from '../ui/BottomSheet';
 import type { Transaction, Category, Account } from '../../types';
@@ -17,6 +18,10 @@ interface TransactionDetailsProps {
 const TransactionDetails: React.FC<TransactionDetailsProps> = ({ tx, categories, accounts, onClose, onEdit }) => {
     const [lightbox, setLightbox] = useState<string | null>(null);
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null);
+    const [reveal, setReveal] = useState(false);
+
+    // Reset reveal each time a different transaction opens.
+    useEffect(() => { setReveal(false); }, [tx]);
 
     useEffect(() => {
         if (!tx?.receiptPath) { setReceiptSrc(null); return; }
@@ -44,7 +49,16 @@ const TransactionDetails: React.FC<TransactionDetailsProps> = ({ tx, categories,
                 {tx && (
                     <div className="flex flex-col gap-5 pb-2">
                         <div className="bg-bg-primary p-6 rounded-2xl flex flex-col items-center gap-1 border border-black/5">
-                            <span className={`text-[28px] font-bold ${amountColor}`}>{sign} {formatCurrency(tx.amount, tx.currency)}</span>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-[28px] font-bold ${amountColor}`}>
+                                    {sign} {isAmountHidden(tx, categories) && !reveal ? MASK : formatCurrency(tx.amount, tx.currency)}
+                                </span>
+                                {isAmountHidden(tx, categories) && (
+                                    <button onClick={() => setReveal(r => !r)} className="text-text-muted active:scale-90 transition-transform" title={reveal ? 'Hide' : 'Reveal'}>
+                                        {reveal ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                )}
+                            </div>
                             <span className="text-[12px] font-bold uppercase tracking-widest text-text-muted">{tx.type}</span>
                         </div>
 

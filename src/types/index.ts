@@ -21,6 +21,7 @@ export interface Category {
   icon: string;
   color: string;
   type: TransactionType;
+  hidden?: number; // 1 = mask amounts of this category's transactions
 }
 
 export interface Transaction {
@@ -35,6 +36,7 @@ export interface Transaction {
   type: TransactionType;
   fee?: number;
   receiptPath?: string; // relative path under Filesystem Directory.Data, e.g. receipts/<uuid>.jpg
+  hidden?: number; // 1 = mask the amount in the UI (still counted in totals)
 }
 
 export interface Budget {
@@ -60,6 +62,7 @@ export interface RecurringTransaction {
   frequency: RecurringFrequency;
   nextRunDate: string; // ISO
   active: number; // 1 | 0 (SQLite has no boolean)
+  hidden?: number; // 1 = generated transactions get their amount masked
 }
 
 export type ConversionRates = Record<string, number>;

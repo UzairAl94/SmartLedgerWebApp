@@ -39,8 +39,8 @@ class RecurringService {
     async addRule(rule: Omit<RecurringTransaction, 'id'>) {
         const id = crypto.randomUUID();
         await sqliteService.execute(
-            'INSERT INTO recurring_transactions (id, amount, currency, categoryId, accountId, toAccountId, note, type, fee, frequency, nextRunDate, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, rule.amount, rule.currency, rule.categoryId || null, rule.accountId, rule.toAccountId || null, rule.note || null, rule.type, rule.fee || null, rule.frequency, rule.nextRunDate, rule.active]
+            'INSERT INTO recurring_transactions (id, amount, currency, categoryId, accountId, toAccountId, note, type, fee, frequency, nextRunDate, active, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, rule.amount, rule.currency, rule.categoryId || null, rule.accountId, rule.toAccountId || null, rule.note || null, rule.type, rule.fee || null, rule.frequency, rule.nextRunDate, rule.active, rule.hidden ? 1 : 0]
         );
         await this.fetchAndNotify();
         return id;
@@ -82,6 +82,7 @@ class RecurringService {
                     type: rule.type,
                     fee: rule.fee || undefined,
                     date: next.toISOString(),
+                    hidden: rule.hidden ? 1 : 0,
                 });
                 created++;
                 next = advance(next, rule.frequency);

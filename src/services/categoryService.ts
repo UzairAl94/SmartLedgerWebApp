@@ -34,11 +34,17 @@ class CategoryService {
     async addCategory(category: Omit<Category, 'id'>) {
         const id = crypto.randomUUID();
         await sqliteService.execute(
-            'INSERT INTO categories (id, name, icon, color, type) VALUES (?, ?, ?, ?, ?)',
-            [id, category.name, category.icon, category.color, category.type]
+            'INSERT INTO categories (id, name, icon, color, type, hidden) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, category.name, category.icon, category.color, category.type, category.hidden ? 1 : 0]
         );
         await this.fetchAndNotify();
         return id;
+    }
+
+    // Toggle whether this category's transaction amounts are masked in the UI.
+    async setHidden(id: string, hidden: boolean) {
+        await sqliteService.execute('UPDATE categories SET hidden = ? WHERE id = ?', [hidden ? 1 : 0, id]);
+        await this.fetchAndNotify();
     }
 
     // Delete a category

@@ -58,10 +58,18 @@ class SqliteService {
         // Migrations for existing installs (CREATE TABLE IF NOT EXISTS won't add
         // new columns). Each guarded — re-running on an up-to-date DB just throws
         // "duplicate column name", which we ignore.
-        try {
-            await db.execute('ALTER TABLE transactions ADD COLUMN receiptPath TEXT');
-        } catch {
-            // column already exists
+        const migrations = [
+            'ALTER TABLE transactions ADD COLUMN receiptPath TEXT',
+            'ALTER TABLE transactions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
+            'ALTER TABLE categories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
+            'ALTER TABLE recurring_transactions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
+        ];
+        for (const sql of migrations) {
+            try {
+                await db.execute(sql);
+            } catch {
+                // column already exists — ignore
+            }
         }
     }
 
@@ -91,7 +99,8 @@ class SqliteService {
                 name TEXT NOT NULL,
                 icon TEXT NOT NULL,
                 color TEXT NOT NULL,
-                type TEXT NOT NULL
+                type TEXT NOT NULL,
+                hidden INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS transactions (
@@ -106,6 +115,7 @@ class SqliteService {
                 type TEXT NOT NULL,
                 fee REAL,
                 receiptPath TEXT,
+                hidden INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(accountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(toAccountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
@@ -137,7 +147,8 @@ class SqliteService {
                 fee REAL,
                 frequency TEXT NOT NULL,
                 nextRunDate TEXT NOT NULL,
-                active INTEGER NOT NULL DEFAULT 1
+                active INTEGER NOT NULL DEFAULT 1,
+                hidden INTEGER NOT NULL DEFAULT 0
             );
         `;
     }
