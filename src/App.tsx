@@ -6,6 +6,7 @@ import Transactions from './screens/Transactions';
 import Analytics from './screens/Analytics';
 import Settings from './screens/Settings';
 import Categories from './screens/Categories';
+import Budgets from './screens/Budgets';
 import BottomSheet from './components/ui/BottomSheet';
 import TransactionForm from './components/transactions/TransactionForm';
 import AccountForm from './components/forms/AccountForm';
@@ -13,6 +14,7 @@ import CategoryForm from './components/forms/CategoryForm';
 import { accountService } from './services/accountService';
 import { transactionService } from './services/transactionService';
 import { categoryService } from './services/categoryService';
+import { budgetService } from './services/budgetService';
 import { settingsService } from './services/settingsService';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
@@ -20,7 +22,7 @@ import { sqliteService } from './services/sqliteService';
 import { secretsService, SECRET_KEYS } from './services/secretsService';
 import LockScreen from './components/security/LockScreen';
 import { Cloud, Loader2 } from 'lucide-react';
-import type { Account, Transaction, Category, UserSettings } from './types';
+import type { Account, Transaction, Category, UserSettings, Budget } from './types';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('Home');
@@ -38,6 +40,7 @@ const App: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDbReady, setIsDbReady] = useState(false);
@@ -99,6 +102,10 @@ const App: React.FC = () => {
       checkLoading();
     });
 
+    const unsubBudgets = budgetService.subscribeToBudgets((data) => {
+      setBudgets(data);
+    });
+
     const unsubSettings = settingsService.subscribeToSettings((data) => {
       setSettings(data);
       settingsLoaded = true;
@@ -109,6 +116,7 @@ const App: React.FC = () => {
       unsubAccounts();
       unsubTransactions();
       unsubCategories();
+      unsubBudgets();
       unsubSettings();
     };
   }, [isDbReady]);
@@ -247,7 +255,15 @@ const App: React.FC = () => {
       case 'Insights':
         return <Analytics categories={categories} settings={settings} />;
       case 'Settings':
-        return <Settings onNavigateCategories={() => setActiveTab('Categories')} settings={settings} />;
+        return (
+          <Settings
+            onNavigateCategories={() => setActiveTab('Categories')}
+            onNavigateBudgets={() => setActiveTab('Budgets')}
+            settings={settings}
+          />
+        );
+      case 'Budgets':
+        return <Budgets budgets={budgets} categories={categories} settings={settings} />;
       case 'Categories':
         return (
           <Categories

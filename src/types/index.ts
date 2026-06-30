@@ -36,6 +36,14 @@ export interface Transaction {
   fee?: number;
 }
 
+export interface Budget {
+  id: string;
+  categoryId: string;
+  amount: number;
+  currency: Currency;
+  period: 'monthly';
+}
+
 export type ConversionRates = Record<string, number>;
 
 export interface UserSettings {

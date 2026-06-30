@@ -105,6 +105,15 @@ class SqliteService {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS budgets (
+                id TEXT PRIMARY KEY,
+                categoryId TEXT NOT NULL,
+                amount REAL NOT NULL,
+                currency TEXT NOT NULL,
+                period TEXT NOT NULL,
+                FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE CASCADE
+            );
         `;
     }
 
