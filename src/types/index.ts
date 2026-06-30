@@ -43,8 +43,6 @@ export interface UserSettings {
   monthStartDay: number;
   useCustomRates: boolean;
   customRates: ConversionRates;
-  elevenLabsApiKey?: string;
-  deepSeekApiKey?: string;
   appLockEnabled: boolean;
-  appPin?: string; // 4-digit PIN
+  appPin?: string; // SHA-256 hash of the 4-digit PIN
 }

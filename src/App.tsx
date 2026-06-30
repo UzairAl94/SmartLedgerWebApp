@@ -17,6 +17,7 @@ import { settingsService } from './services/settingsService';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
 import { sqliteService } from './services/sqliteService';
+import { secretsService, SECRET_KEYS } from './services/secretsService';
 import LockScreen from './components/security/LockScreen';
 import { Cloud, Loader2 } from 'lucide-react';
 import type { Account, Transaction, Category, UserSettings } from './types';
@@ -56,6 +57,7 @@ const App: React.FC = () => {
       try {
         console.log('Initializing database from App...');
         await sqliteService.initialize();
+        await secretsService.seedFromEnvIfEmpty();
         console.log('Database initialized successfully from App');
         setIsDbReady(true);
       } catch (error) {
@@ -131,8 +133,9 @@ const App: React.FC = () => {
     setProcessingError(null);
 
     try {
-      // Check for DeepSeek API key
-      if (!settings.deepSeekApiKey) {
+      // Check for DeepSeek API key (secure storage)
+      const deepSeekApiKey = await secretsService.getKey(SECRET_KEYS.deepSeek);
+      if (!deepSeekApiKey) {
         throw new Error("DeepSeek API Key not configured. Please add it in Settings.");
       }
 
@@ -141,7 +144,7 @@ const App: React.FC = () => {
       const categoryNames = categories.map(c => c.name);
       const parsed = await deepSeekService.parseTransaction(
         voiceResult,
-        settings.deepSeekApiKey,
+        deepSeekApiKey,
         accountNames,
         categoryNames
       );

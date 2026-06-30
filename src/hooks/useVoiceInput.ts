@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { elevenLabsService } from '../services/elevenLabsService';
-import { settingsService } from '../services/settingsService';
+import { secretsService, SECRET_KEYS } from '../services/secretsService';
 
 interface UseVoiceInputResult {
     isRecording: boolean;
@@ -23,14 +23,9 @@ export const useVoiceInput = (onResult?: (text: string) => void): UseVoiceInputR
     const chunksRef = useRef<Blob[]>([]);
     const [apiKey, setApiKey] = useState<string>('');
 
-    // Fetch API Key
+    // Fetch API Key from secure storage
     useEffect(() => {
-        settingsService.getSettings().then(s => setApiKey(s.elevenLabsApiKey || ''));
-        // Subscribe for changes if user adds it while on the page
-        const unsub = settingsService.subscribeToSettings(s => {
-            setApiKey(s.elevenLabsApiKey || '');
-        });
-        return unsub;
+        secretsService.getKey(SECRET_KEYS.elevenLabs).then(k => setApiKey(k || ''));
     }, []);
 
     const startRecording = async () => {

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
 import { transactionService } from '../services/transactionService';
+import { secretsService, SECRET_KEYS } from '../services/secretsService';
 import BottomSheet from '../components/ui/BottomSheet';
 import PinSetup from '../components/security/PinSetup';
 import type { UserSettings } from '../types';
@@ -19,6 +20,28 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
     // App-lock PIN sheet: null = closed, 'set-enable' = set PIN then turn lock on, 'change' = change existing PIN
     const [pinSheet, setPinSheet] = useState<null | 'set-enable' | 'change'>(null);
     const [recomputing, setRecomputing] = useState(false);
+    // API keys (secure storage, not part of settings JSON)
+    const [deepSeekKey, setDeepSeekKey] = useState('');
+    const [elevenKey, setElevenKey] = useState('');
+    const [keysSaving, setKeysSaving] = useState(false);
+    const [keysSaved, setKeysSaved] = useState(false);
+
+    useEffect(() => {
+        secretsService.getKey(SECRET_KEYS.deepSeek).then(k => setDeepSeekKey(k || ''));
+        secretsService.getKey(SECRET_KEYS.elevenLabs).then(k => setElevenKey(k || ''));
+    }, []);
+
+    const handleSaveKeys = async () => {
+        setKeysSaving(true);
+        try {
+            await secretsService.setKey(SECRET_KEYS.deepSeek, deepSeekKey.trim());
+            await secretsService.setKey(SECRET_KEYS.elevenLabs, elevenKey.trim());
+            setKeysSaved(true);
+            setTimeout(() => setKeysSaved(false), 2000);
+        } finally {
+            setKeysSaving(false);
+        }
+    };
 
     useEffect(() => {
         const handler = (e: any) => {
@@ -248,6 +271,46 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, settings }) =
                             </div>
                         </button>
                     )}
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">API Keys</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm p-4 flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                        <label className="flex items-center gap-2 text-[13px] font-semibold text-text-secondary">
+                            <Bot size={16} className="text-primary" /> DeepSeek (AI parsing)
+                        </label>
+                        <input
+                            type="password"
+                            placeholder="sk-..."
+                            value={deepSeekKey}
+                            onChange={(e) => setDeepSeekKey(e.target.value)}
+                            className="w-full bg-bg-primary border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                        />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <label className="flex items-center gap-2 text-[13px] font-semibold text-text-secondary">
+                            <Mic size={16} className="text-primary" /> ElevenLabs (speech-to-text)
+                        </label>
+                        <input
+                            type="password"
+                            placeholder="Enter API key"
+                            value={elevenKey}
+                            onChange={(e) => setElevenKey(e.target.value)}
+                            className="w-full bg-bg-primary border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                        />
+                    </div>
+                    <button
+                        onClick={handleSaveKeys}
+                        disabled={keysSaving}
+                        className="w-full py-3 bg-primary text-white rounded-xl font-bold text-[14px] active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        {keysSaving ? 'Saving...' : keysSaved ? 'Saved ✓' : 'Save Keys'}
+                    </button>
+                    <p className="text-[11px] text-text-muted">
+                        Stored in your device's secure storage, never in backups.
+                    </p>
                 </div>
             </section>
 
