@@ -104,7 +104,7 @@ class TransactionService {
         });
 
         await this.fetchAndNotify();
-        await (accountService as any).fetchAndNotify(); // Refresh accounts too
+        await accountService.fetchAndNotify(); // Refresh accounts too
         return id;
     }
 
@@ -147,7 +147,7 @@ class TransactionService {
         });
 
         await this.fetchAndNotify();
-        await (accountService as any).fetchAndNotify(); // Refresh accounts too
+        await accountService.fetchAndNotify(); // Refresh accounts too
     }
 
     async updateTransaction(oldTx: Transaction, newTxData: Omit<Transaction, 'id'>) {
@@ -218,7 +218,7 @@ class TransactionService {
         });
 
         await this.fetchAndNotify();
-        await (accountService as any).fetchAndNotify(); // Refresh accounts too
+        await accountService.fetchAndNotify(); // Refresh accounts too
     }
 
     // Reconcile every account's stored balance from scratch:
@@ -258,7 +258,7 @@ class TransactionService {
         });
 
         await this.fetchAndNotify();
-        await (accountService as any).fetchAndNotify();
+        await accountService.fetchAndNotify();
     }
 }
 

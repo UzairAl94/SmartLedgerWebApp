@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import PinPad from './PinPad';
+import { hashPin } from '../../utils/crypto';
 
 interface PinSetupProps {
-    /** Called with the confirmed 4-digit PIN. */
-    onComplete: (pin: string) => void;
+    /** Called with the SHA-256 hash of the confirmed 4-digit PIN. */
+    onComplete: (pinHash: string) => void;
 }
 
 const PinSetup: React.FC<PinSetupProps> = ({ onComplete }) => {
@@ -16,9 +17,9 @@ const PinSetup: React.FC<PinSetupProps> = ({ onComplete }) => {
     };
 
     // Stage 2: must match the first entry
-    const handleConfirm = (pin: string) => {
+    const handleConfirm = async (pin: string) => {
         if (pin === firstPin) {
-            onComplete(pin);
+            onComplete(await hashPin(pin));
             return true;
         }
         return false; // mismatch -> PinPad shakes + clears for retry

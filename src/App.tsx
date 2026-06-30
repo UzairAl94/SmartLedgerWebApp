@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDbReady, setIsDbReady] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   // App lock: decide once when settings first load, so toggling lock mid-session
   // doesn't lock the user out until the next launch.
@@ -59,6 +60,7 @@ const App: React.FC = () => {
         setIsDbReady(true);
       } catch (error) {
         console.error('Failed to initialize database:', error);
+        setDbError(error instanceof Error ? error.message : 'Failed to initialize the local database.');
       }
     };
     initDb();
@@ -257,6 +259,27 @@ const App: React.FC = () => {
         );
     }
   };
+
+  if (dbError) {
+    return (
+      <div className="h-[100dvh] w-full bg-bg-primary flex flex-col items-center justify-center p-8 gap-6 text-center max-w-[500px] mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-expense/10 text-expense flex items-center justify-center">
+          <Loader2 className="text-expense" size={30} />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold mb-2">Database unavailable</h2>
+          <p className="text-text-muted text-[14px]">Couldn't open the local database.</p>
+          <p className="text-text-muted text-[12px] mt-3 font-mono break-words opacity-70">{dbError}</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 bg-primary text-white rounded-2xl font-bold text-[15px] shadow-lg shadow-primary/20 active:scale-95 transition-all"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading || !isDbReady) {
     return (

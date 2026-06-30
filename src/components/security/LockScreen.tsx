@@ -1,15 +1,27 @@
 import React from 'react';
 import { Lock } from 'lucide-react';
 import PinPad from './PinPad';
+import { hashPin, isLegacyPlaintextPin } from '../../utils/crypto';
+import { settingsService } from '../../services/settingsService';
 
 interface LockScreenProps {
-    pin: string;
+    pin: string; // stored PIN hash (or legacy 4-digit plaintext)
     onUnlock: () => void;
 }
 
 const LockScreen: React.FC<LockScreenProps> = ({ pin, onUnlock }) => {
-    const handleComplete = (entered: string) => {
-        if (entered === pin) {
+    const handleComplete = async (entered: string) => {
+        // Legacy plaintext PIN: accept a plaintext match once, then upgrade to a hash.
+        if (isLegacyPlaintextPin(pin)) {
+            if (entered === pin) {
+                await settingsService.updateSettings({ appPin: await hashPin(entered) });
+                onUnlock();
+                return true;
+            }
+            return false;
+        }
+
+        if ((await hashPin(entered)) === pin) {
             onUnlock();
             return true;
         }

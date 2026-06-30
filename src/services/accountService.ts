@@ -16,7 +16,7 @@ class AccountService {
         };
     }
 
-    private async fetchAndNotify() {
+    async fetchAndNotify() {
         try {
             const accounts = await this.getAllAccounts();
             this.listeners.forEach(listener => listener(accounts));
