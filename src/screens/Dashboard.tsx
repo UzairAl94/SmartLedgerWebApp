@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { transactionService } from '../services/transactionService';
+import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import type { Account, Transaction, Category, UserSettings } from '../types';
@@ -8,6 +7,7 @@ import type { Account, Transaction, Category, UserSettings } from '../types';
 interface DashboardProps {
     onAddTx: () => void;
     onEditTx: (tx: Transaction) => void;
+    onViewTx: (tx: Transaction) => void;
     onViewAll: () => void;
     onVoiceResult: (text: string) => void;
     accounts: Account[];
@@ -16,7 +16,7 @@ interface DashboardProps {
     settings: UserSettings | null;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
     const { isRecording, isProcessing, startRecording, stopRecording, error: voiceError } = useVoiceInput(onVoiceResult);
     const [showBalance, setShowBalance] = useState(false);
     // Use the main currency from settings
@@ -130,7 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewAll, onV
                         return (
                             <div
                                 key={tx.id}
-                                onClick={() => onEditTx(tx)}
+                                onClick={() => onViewTx(tx)}
                                 className="flex items-center p-4 bg-bg-secondary rounded-xl gap-4 shadow-sm active:scale-[0.98] transition-all cursor-pointer border border-transparent hover:border-black/5"
                             >
                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tx.type === 'Transfer' ? 'bg-blue-50 text-blue-600' : ''}`} style={tx.type !== 'Transfer' ? { backgroundColor: category?.color + '20' } : undefined}>
@@ -164,13 +164,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewAll, onV
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        if (window.confirm("Delete this transaction? This will automatically update your account balance.")) {
-                                            transactionService.deleteTransaction(tx);
-                                        }
+                                        onEditTx(tx);
                                     }}
-                                    className="w-9 h-9 rounded-xl bg-bg-primary flex items-center justify-center text-text-muted hover:text-expense transition-all border border-black/5"
+                                    className="w-9 h-9 rounded-xl bg-bg-primary flex items-center justify-center text-text-muted hover:text-primary transition-all border border-black/5"
+                                    title="Edit transaction"
                                 >
-                                    <Trash2 size={16} />
+                                    <Pencil size={16} />
                                 </button>
                             </div>
                         );

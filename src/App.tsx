@@ -10,6 +10,7 @@ import Budgets from './screens/Budgets';
 import Recurring from './screens/Recurring';
 import BottomSheet from './components/ui/BottomSheet';
 import TransactionForm from './components/transactions/TransactionForm';
+import TransactionDetails from './components/transactions/TransactionDetails';
 import AccountForm from './components/forms/AccountForm';
 import CategoryForm from './components/forms/CategoryForm';
 import { accountService } from './services/accountService';
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [initialCategoryType, setInitialCategoryType] = useState<'Expense' | 'Income'>('Expense');
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  const [transactionToView, setTransactionToView] = useState<Transaction | null>(null);
   const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
 
   // Real Data State
@@ -252,8 +254,13 @@ const App: React.FC = () => {
   };
 
   const handleEditTransaction = (tx: Transaction) => {
+    setTransactionToView(null);
     setTransactionToEdit(tx);
     setIsAddTxOpen(true);
+  };
+
+  const handleViewTransaction = (tx: Transaction) => {
+    setTransactionToView(tx);
   };
 
   const handleEditAccount = (account: Account) => {
@@ -271,6 +278,7 @@ const App: React.FC = () => {
               setIsAddTxOpen(true);
             }}
             onEditTx={handleEditTransaction}
+            onViewTx={handleViewTransaction}
             onViewAll={() => setActiveTab('History')}
             onVoiceResult={handleVoiceResult}
             accounts={accounts}
@@ -303,6 +311,7 @@ const App: React.FC = () => {
             setAccountFilter={setAccountFilter}
             settings={settings}
             onEditTx={handleEditTransaction}
+            onViewTx={handleViewTransaction}
           />
         );
       case 'Insights':
@@ -339,6 +348,7 @@ const App: React.FC = () => {
               setIsAddTxOpen(true);
             }}
             onEditTx={handleEditTransaction}
+            onViewTx={handleViewTransaction}
             onViewAll={() => setActiveTab('History')}
             onVoiceResult={handleVoiceResult}
             accounts={accounts}
@@ -401,6 +411,14 @@ const App: React.FC = () => {
         </div>
         {renderScreen()}
       </MobileLayout>
+
+      <TransactionDetails
+        tx={transactionToView}
+        categories={categories}
+        accounts={accounts}
+        onClose={() => setTransactionToView(null)}
+        onEdit={handleEditTransaction}
+      />
 
       <BottomSheet
         isOpen={isAddTxOpen}
