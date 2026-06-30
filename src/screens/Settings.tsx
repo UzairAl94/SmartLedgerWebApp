@@ -5,6 +5,7 @@ import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
 import { transactionService } from '../services/transactionService';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
+import { notificationService } from '../services/notificationService';
 import BottomSheet from '../components/ui/BottomSheet';
 import PinSetup from '../components/security/PinSetup';
 import type { UserSettings } from '../types';
@@ -468,12 +469,34 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                         </button>
                     )}
 
-                    <button className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-50 text-rose-600">
-                            <Bell size={20} />
+                    <div className="w-full flex items-center justify-between p-4 border-b border-black/5 last:border-0">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-50 text-rose-600">
+                                <Bell size={20} />
+                            </div>
+                            <div>
+                                <span className="block font-semibold text-[15px]">Notifications</span>
+                                <span className="text-[12px] text-text-muted">Budget alerts & recurring reminders</span>
+                            </div>
                         </div>
-                        <span className="font-semibold text-[15px]">Notifications</span>
-                    </button>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={settings.notificationsEnabled}
+                                onChange={async (e) => {
+                                    if (e.target.checked) {
+                                        const granted = await notificationService.requestPermission();
+                                        handleUpdateSettings({ notificationsEnabled: granted });
+                                        if (!granted) alert('Notification permission was denied. Enable it in system settings.');
+                                    } else {
+                                        handleUpdateSettings({ notificationsEnabled: false });
+                                    }
+                                }}
+                                className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
 
                     <button className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0">
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-100 text-slate-600">

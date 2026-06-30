@@ -17,7 +17,10 @@ import { transactionService } from './services/transactionService';
 import { categoryService } from './services/categoryService';
 import { budgetService } from './services/budgetService';
 import { recurringService } from './services/recurringService';
+import { notificationService } from './services/notificationService';
 import { settingsService } from './services/settingsService';
+import { convertCurrency } from './utils/format';
+import { setDate, subMonths, startOfDay, isAfter, parseISO } from 'date-fns';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
 import { sqliteService } from './services/sqliteService';
@@ -53,6 +56,8 @@ const App: React.FC = () => {
   // doesn't lock the user out until the next launch.
   const [isLocked, setIsLocked] = useState(false);
   const lockInitialized = useRef(false);
+  const recurringPostedRef = useRef(0);
+  const notifiedRef = useRef(false);
 
   // Navigation State
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
@@ -65,7 +70,7 @@ const App: React.FC = () => {
         await sqliteService.initialize();
         await secretsService.seedFromEnvIfEmpty();
         // Auto-post any due recurring transactions (catch-up since last launch).
-        await recurringService.materializeDue();
+        recurringPostedRef.current = await recurringService.materializeDue();
         console.log('Database initialized successfully from App');
         setIsDbReady(true);
       } catch (error) {
@@ -146,6 +151,44 @@ const App: React.FC = () => {
       return () => mq.removeEventListener('change', apply);
     }
   }, [settings?.theme]);
+
+  // Launch notifications: recurring-posted notice + budget over-limit alerts.
+  useEffect(() => {
+    if (!isDbReady || !settings || notifiedRef.current) return;
+    if (!settings.notificationsEnabled) return;
+    notifiedRef.current = true;
+
+    (async () => {
+      if (recurringPostedRef.current > 0) {
+        await notificationService.notify(
+          'Recurring transactions posted',
+          `${recurringPostedRef.current} scheduled transaction(s) were added.`
+        );
+      }
+
+      if (budgets.length === 0) return;
+      const allTx = await transactionService.getAllTransactions();
+      const now = new Date();
+      const day = settings.monthStartDay || 1;
+      let periodStart = startOfDay(setDate(now, day));
+      if (isAfter(periodStart, now)) periodStart = subMonths(periodStart, 1);
+
+      budgets.forEach((budget, i) => {
+        const spent = allTx
+          .filter(t => t.type === 'Expense' && t.categoryId === budget.categoryId)
+          .filter(t => isAfter(parseISO(t.date), periodStart))
+          .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, budget.currency, settings.customRates, settings.useCustomRates), 0);
+        if (spent > budget.amount) {
+          const cat = categories.find(c => c.id === budget.categoryId);
+          notificationService.notify(
+            'Budget exceeded',
+            `${cat?.name || 'A category'} is over its budget this period.`,
+            5000 + i
+          );
+        }
+      });
+    })();
+  }, [isDbReady, settings, budgets, categories]);
 
   useEffect(() => {
     if (!settings || lockInitialized.current) return;
