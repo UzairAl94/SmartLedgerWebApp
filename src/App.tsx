@@ -73,6 +73,8 @@ const App: React.FC = () => {
         await secretsService.seedFromEnvIfEmpty();
         // Auto-post any due recurring transactions (catch-up since last launch).
         recurringPostedRef.current = await recurringService.materializeDue();
+        // Reconcile balances on entry so totals are always correct.
+        await transactionService.recalculateBalances();
         console.log('Database initialized successfully from App');
         setIsDbReady(true);
       } catch (error) {
@@ -280,6 +282,10 @@ const App: React.FC = () => {
             onEditTx={handleEditTransaction}
             onViewTx={handleViewTransaction}
             onViewAll={() => setActiveTab('History')}
+            onAddAccount={() => {
+              setAccountToEdit(null);
+              setIsAddAccountOpen(true);
+            }}
             onVoiceResult={handleVoiceResult}
             accounts={accounts}
             transactions={transactions}
@@ -350,6 +356,10 @@ const App: React.FC = () => {
             onEditTx={handleEditTransaction}
             onViewTx={handleViewTransaction}
             onViewAll={() => setActiveTab('History')}
+            onAddAccount={() => {
+              setAccountToEdit(null);
+              setIsAddAccountOpen(true);
+            }}
             onVoiceResult={handleVoiceResult}
             accounts={accounts}
             transactions={transactions}

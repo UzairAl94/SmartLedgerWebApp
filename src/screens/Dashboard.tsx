@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2, Info } from 'lucide-react';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { isAmountHidden, MASK } from '../utils/visibility';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { secretsService, SECRET_KEYS } from '../services/secretsService';
 import type { Account, Transaction, Category, UserSettings } from '../types';
 
 interface DashboardProps {
@@ -11,15 +12,36 @@ interface DashboardProps {
     onViewTx: (tx: Transaction) => void;
     onViewAll: () => void;
     onVoiceResult: (text: string) => void;
+    onAddAccount: () => void;
     accounts: Account[];
     transactions: Transaction[];
     categories: Category[];
     settings: UserSettings | null;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onViewAll, onVoiceResult, accounts, transactions, categories, settings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onViewAll, onVoiceResult, onAddAccount, accounts, transactions, categories, settings }) => {
     const { isRecording, isProcessing, startRecording, stopRecording, error: voiceError } = useVoiceInput(onVoiceResult);
     const [showBalance, setShowBalance] = useState(false);
+    const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+    const [hasVoiceKeys, setHasVoiceKeys] = useState(false);
+
+    const hasAccounts = accounts.length > 0;
+
+    // Voice needs both keys: ElevenLabs (transcribe) + DeepSeek (parse).
+    useEffect(() => {
+        Promise.all([
+            secretsService.getKey(SECRET_KEYS.elevenLabs),
+            secretsService.getKey(SECRET_KEYS.deepSeek),
+        ]).then(([el, ds]) => setHasVoiceKeys(!!el && !!ds));
+    }, []);
+
+    const handleVoiceClick = () => {
+        if (isRecording) { stopRecording(); return; }
+        if (!hasAccounts) { setVoiceNotice('Add an account first to record transactions.'); return; }
+        if (!hasVoiceKeys) { setVoiceNotice('Add your ElevenLabs and DeepSeek API keys in Settings to use voice input.'); return; }
+        setVoiceNotice(null);
+        startRecording();
+    };
     // Use the main currency from settings
     const mainCurrency = settings?.mainCurrency || 'PKR';
 
@@ -83,16 +105,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
 
             <section>
                 <h3 className="text-base font-semibold mb-4">Quick Actions</h3>
+
+                {!hasAccounts && (
+                    <div className="mb-4 p-4 bg-primary-light border border-primary/20 rounded-2xl flex items-center gap-3">
+                        <Info size={20} className="text-primary shrink-0" />
+                        <div className="flex-1">
+                            <p className="text-[13px] font-semibold text-primary">No accounts yet</p>
+                            <p className="text-[12px] text-text-secondary">Add an account to start recording transactions.</p>
+                        </div>
+                        <button
+                            onClick={onAddAccount}
+                            className="text-[13px] font-bold text-white bg-primary px-3 py-2 rounded-xl active:scale-95 transition-transform shrink-0"
+                        >
+                            Add
+                        </button>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                     <button
-                        className="flex flex-col items-center justify-center p-6 bg-primary-light text-primary rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-transform"
+                        className="flex flex-col items-center justify-center p-6 bg-primary-light text-primary rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100 disabled:cursor-not-allowed"
                         onClick={onAddTx}
+                        disabled={!hasAccounts}
                     >
                         <Plus size={24} />
                         <span>Add Transaction</span>
                     </button>
                     <button
-                        onClick={isRecording ? stopRecording : startRecording}
+                        onClick={handleVoiceClick}
                         disabled={isProcessing}
                         className={`flex flex-col items-center justify-center p-6 rounded-2xl gap-2 font-semibold text-[14px] active:scale-95 transition-all border border-black/5 ${isRecording ? 'bg-expense text-white shadow-lg shadow-expense/20 animate-pulse' : isProcessing ? 'bg-bg-secondary opacity-80' : 'bg-slate-50 text-text-secondary shadow-sm'}`}
                     >
@@ -104,6 +144,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
                         <span>{isRecording ? 'Stop' : isProcessing ? 'Processing...' : 'Voice Input'}</span>
                     </button>
                 </div>
+                {voiceNotice && (
+                    <div className="mt-4 p-4 bg-warning/10 border border-warning/20 rounded-2xl flex items-start gap-3">
+                        <Info size={18} className="text-warning shrink-0 mt-0.5" />
+                        <p className="text-[13px] font-semibold text-text-secondary">{voiceNotice}</p>
+                    </div>
+                )}
                 {voiceError && (
                     <div className="mt-4 p-4 bg-expense/10 border border-expense/20 rounded-2xl">
                         <p className="text-[13px] font-semibold text-expense">{voiceError}</p>

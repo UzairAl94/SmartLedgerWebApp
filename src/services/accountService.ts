@@ -55,6 +55,10 @@ class AccountService {
             [...values, id]
         );
         await this.fetchAndNotify();
+
+        // Initial balance / currency edits change derived balances — recompute.
+        const { transactionService } = await import('./transactionService');
+        await transactionService.recalculateBalances();
     }
 
     // Delete an account
@@ -85,7 +89,7 @@ class AccountService {
 
         // Dynamically import to avoid circular dependency at top-level
         const { transactionService } = await import('./transactionService');
-        await transactionService.fetchAndNotify();
+        await transactionService.recalculateBalances();
     }
 }
 

@@ -104,8 +104,9 @@ class TransactionService {
             }
         });
 
-        await this.fetchAndNotify();
-        await accountService.fetchAndNotify(); // Refresh accounts too
+        // Recompute all balances from scratch so totals are always correct,
+        // instead of relying on incremental updates that can drift.
+        await this.recalculateBalances();
         return id;
     }
 
@@ -150,8 +151,9 @@ class TransactionService {
         // Remove the receipt file now that the transaction is gone (no orphans).
         await receiptService.remove(tx.receiptPath);
 
-        await this.fetchAndNotify();
-        await accountService.fetchAndNotify(); // Refresh accounts too
+        // Recompute all balances from scratch so totals are always correct,
+        // instead of relying on incremental updates that can drift.
+        await this.recalculateBalances();
     }
 
     async updateTransaction(oldTx: Transaction, newTxData: Omit<Transaction, 'id'>) {
@@ -226,8 +228,9 @@ class TransactionService {
             await receiptService.remove(oldTx.receiptPath);
         }
 
-        await this.fetchAndNotify();
-        await accountService.fetchAndNotify(); // Refresh accounts too
+        // Recompute all balances from scratch so totals are always correct,
+        // instead of relying on incremental updates that can drift.
+        await this.recalculateBalances();
     }
 
     // Reconcile every account's balance from scratch:
