@@ -29,6 +29,7 @@
    real CSS custom properties, so every token-based utility (bg-bg-secondary,
    text-text-primary, ...) flips automatically under .dark. */
 .dark {
+  --color-primary: #6366f1;
   --color-primary-light: #312e81;
   --color-income-light: #064e3b;
   --color-expense-light: #4c1d24;
