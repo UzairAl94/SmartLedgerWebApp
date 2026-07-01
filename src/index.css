@@ -58,6 +58,9 @@
 .dark .bg-gray-50,
 .dark .hover\:bg-gray-50:hover,
 .dark .active\:bg-slate-50:active { background-color: rgba(255, 255, 255, 0.04); }
+/* Accent-tinted buttons (Add Transaction, + buttons): indigo text on deep-indigo
+   tint is unreadable in dark — force the label/icon white. */
+.dark .bg-primary-light.text-primary { color: #ffffff; }
 
 @layer base {
   * {
