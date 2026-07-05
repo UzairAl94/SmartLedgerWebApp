@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat, Cloud, Clock } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
@@ -23,6 +23,18 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
     // App-lock PIN sheet: null = closed, 'set-enable' = set PIN then turn lock on, 'change' = change existing PIN
     const [pinSheet, setPinSheet] = useState<null | 'set-enable' | 'change'>(null);
     const [recomputing, setRecomputing] = useState(false);
+    const [driveBusy, setDriveBusy] = useState(false);
+
+    const handleDriveBackup = async () => {
+        setDriveBusy(true);
+        try {
+            await backupService.backupToDrive();
+        } catch (error) {
+            alert('Backup failed: ' + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            setDriveBusy(false);
+        }
+    };
     // API keys (secure storage, not part of settings JSON)
     const [deepSeekKey, setDeepSeekKey] = useState('');
     const [elevenKey, setElevenKey] = useState('');
@@ -390,6 +402,77 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                     <p className="text-[11px] text-text-muted">
                         Stored in your device's secure storage, never in backups.
                     </p>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Automatic Backup</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between p-4 border-b border-black/5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                <Clock size={20} />
+                            </div>
+                            <div>
+                                <span className="block font-semibold text-[15px]">Auto Backup</span>
+                                <span className="text-[12px] text-text-muted">
+                                    {settings.lastBackupAt ? `Last: ${new Date(settings.lastBackupAt).toLocaleString()}` : 'Never backed up'}
+                                </span>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={settings.autoBackupEnabled}
+                                onChange={(e) => handleUpdateSettings({ autoBackupEnabled: e.target.checked })}
+                                className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+
+                    {settings.autoBackupEnabled && (
+                        <div className="p-4 flex flex-col gap-4 bg-slate-50/50 border-b border-black/5">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[14px] font-semibold text-text-secondary">Frequency</span>
+                                <select
+                                    value={settings.backupFrequency}
+                                    onChange={(e) => handleUpdateSettings({ backupFrequency: e.target.value as UserSettings['backupFrequency'] })}
+                                    className="text-[14px] font-bold text-text-primary bg-white border border-black/5 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20"
+                                >
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-[14px] font-semibold text-text-secondary">Time</span>
+                                <input
+                                    type="time"
+                                    value={settings.backupTime}
+                                    onChange={(e) => handleUpdateSettings({ backupTime: e.target.value })}
+                                    className="text-[14px] font-bold text-text-primary bg-white border border-black/5 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20"
+                                />
+                            </div>
+                            <p className="text-[11px] text-text-muted italic">
+                                Runs the next time you open the app after this time. Backups save to Documents/SmartLedger; files older than a week are removed automatically.
+                            </p>
+                        </div>
+                    )}
+
+                    <button
+                        onClick={handleDriveBackup}
+                        disabled={driveBusy}
+                        className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors disabled:opacity-50"
+                    >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600">
+                            <Cloud size={20} />
+                        </div>
+                        <div className="flex-1 text-left">
+                            <span className="block font-semibold text-[15px]">Back up to Google Drive</span>
+                            <span className="text-[12px] text-text-muted">{driveBusy ? 'Preparing…' : 'Choose Drive in the share sheet'}</span>
+                        </div>
+                    </button>
                 </div>
             </section>
 

@@ -56,65 +56,153 @@ const restoreData = async (data: BackupData) => {
     });
 };
 
-export const backupService = {
-    exportBackup: async (): Promise<void> => {
+const BACKUP_PREFIX = 'SmartLedger_Backup_';
+const BACKUP_DIR = 'SmartLedger';
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+const isWeb = () => Capacitor.getPlatform() === 'web';
+
+// Assemble the backup ZIP (data.json + receipt images).
+const buildBackupZip = async (): Promise<JSZip> => {
+    const transactions = await transactionService.getAllTransactions();
+    const data: BackupData = {
+        version: 2,
+        timestamp: new Date().toISOString(),
+        accounts: await accountService.getAllAccounts(),
+        transactions,
+        categories: await categoryService.getAllCategories(),
+        settings: await settingsService.getSettings(),
+    };
+    const zip = new JSZip();
+    zip.file('data.json', JSON.stringify(data, null, 2));
+    for (const tx of transactions) {
+        if (!tx.receiptPath) continue;
         try {
-            const transactions = await transactionService.getAllTransactions();
-            const data: BackupData = {
-                version: 2,
-                timestamp: new Date().toISOString(),
-                accounts: await accountService.getAllAccounts(),
-                transactions,
-                categories: await categoryService.getAllCategories(),
-                settings: await settingsService.getSettings(),
-            };
-
-            // Bundle JSON + receipt images into a ZIP.
-            const zip = new JSZip();
-            zip.file('data.json', JSON.stringify(data, null, 2));
-            for (const tx of transactions) {
-                if (!tx.receiptPath) continue;
-                try {
-                    const base64 = await receiptService.readBase64(tx.receiptPath);
-                    zip.file(tx.receiptPath, base64, { base64: true });
-                } catch (e) {
-                    console.warn('Skipping missing receipt during backup:', tx.receiptPath, e);
-                }
-            }
-
-            const fileName = `SmartLedger_Backup_${new Date().toISOString().split('T')[0]}.zip`;
-
-            if (Capacitor.getPlatform() === 'web') {
-                const blob = await zip.generateAsync({ type: 'blob' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                return;
-            }
-
-            // Native: write the zip (base64) to Cache and share it.
-            const base64Zip = await zip.generateAsync({ type: 'base64' });
-            const result = await Filesystem.writeFile({
-                path: fileName,
-                data: base64Zip,
-                directory: Directory.Cache,
-            });
-            await Share.share({
-                title: 'Smart Ledger Backup',
-                text: 'Your financial record backup (includes receipts).',
-                url: result.uri,
-                dialogTitle: 'Save your backup',
-            });
-        } catch (error) {
-            console.error('Backup failed:', error);
-            throw error;
+            const base64 = await receiptService.readBase64(tx.receiptPath);
+            zip.file(tx.receiptPath, base64, { base64: true });
+        } catch (e) {
+            console.warn('Skipping missing receipt during backup:', tx.receiptPath, e);
         }
-    },
+    }
+    return zip;
+};
+
+const backupFileName = (): string => {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`;
+    return `${BACKUP_PREFIX}${stamp}.zip`;
+};
+
+// Manual export / "Back up to Drive": build ZIP and hand to the share sheet
+// (web downloads the file directly).
+const shareBackupZip = async (): Promise<void> => {
+    const zip = await buildBackupZip();
+    const fileName = backupFileName();
+    if (isWeb()) {
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+    }
+    const base64Zip = await zip.generateAsync({ type: 'base64' });
+    const result = await Filesystem.writeFile({ path: fileName, data: base64Zip, directory: Directory.Cache });
+    await Share.share({
+        title: 'Smart Ledger Backup',
+        text: 'Your financial record backup (includes receipts).',
+        url: result.uri,
+        dialogTitle: 'Save your backup',
+    });
+};
+
+// Delete backup files older than one week from the Documents backup folder.
+const pruneOldBackups = async (): Promise<void> => {
+    if (isWeb()) return;
+    try {
+        const { files } = await Filesystem.readdir({ path: BACKUP_DIR, directory: Directory.Documents });
+        const now = Date.now();
+        for (const f of files) {
+            const name = typeof f === 'string' ? f : f.name;
+            if (!name.startsWith(BACKUP_PREFIX)) continue;
+            const path = `${BACKUP_DIR}/${name}`;
+            const st = await Filesystem.stat({ path, directory: Directory.Documents });
+            if (now - st.mtime > WEEK_MS) {
+                await Filesystem.deleteFile({ path, directory: Directory.Documents });
+            }
+        }
+    } catch {
+        // backup dir doesn't exist yet — nothing to prune
+    }
+};
+
+// Silent local backup into Documents/SmartLedger, then prune old files.
+const runAutoBackup = async (): Promise<void> => {
+    if (isWeb()) return; // no silent file writes on web
+    const zip = await buildBackupZip();
+    const base64Zip = await zip.generateAsync({ type: 'base64' });
+    await Filesystem.writeFile({
+        path: `${BACKUP_DIR}/${backupFileName()}`,
+        data: base64Zip,
+        directory: Directory.Documents,
+        recursive: true,
+    });
+    await settingsService.updateSettings({ lastBackupAt: new Date().toISOString() });
+    await pruneOldBackups();
+};
+
+// Launch/resume due-check: run a backup if enough time has elapsed and the
+// configured time-of-day has been reached. Always prunes old files.
+const maybeRunScheduledBackup = async (): Promise<void> => {
+    if (isWeb()) return;
+    await pruneOldBackups();
+
+    const s = await settingsService.getSettings();
+    if (!s.autoBackupEnabled) return;
+
+    const now = new Date();
+    const intervalDays = s.backupFrequency === 'daily' ? 1 : s.backupFrequency === 'weekly' ? 7 : 30;
+
+    let due = false;
+    if (!s.lastBackupAt) {
+        due = true;
+    } else {
+        due = now.getTime() - new Date(s.lastBackupAt).getTime() >= intervalDays * DAY_MS;
+    }
+
+    // Soft time-of-day gate: don't run before the configured time on the due day.
+    if (due && s.backupTime) {
+        const [h, m] = s.backupTime.split(':').map(Number);
+        const threshold = new Date(now);
+        threshold.setHours(h || 0, m || 0, 0, 0);
+        if (now < threshold) due = false;
+    }
+
+    if (due) {
+        try {
+            await runAutoBackup();
+        } catch (e) {
+            console.error('Auto-backup failed:', e);
+        }
+    }
+};
+
+export const backupService = {
+    // Manual export via the share sheet.
+    exportBackup: shareBackupZip,
+
+    // Same share sheet — the user picks Google Drive as the target.
+    backupToDrive: shareBackupZip,
+
+    // Silent local backup + prune (used by the scheduler; exposed for manual runs).
+    runAutoBackup,
+    pruneOldBackups,
+    maybeRunScheduledBackup,
 
     /**
      * Restore from a ZIP backup (ArrayBuffer) or a legacy JSON backup (string).

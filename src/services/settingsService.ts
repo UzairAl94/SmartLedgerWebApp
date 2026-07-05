@@ -19,6 +19,10 @@ const DEFAULT_SETTINGS: UserSettings = {
     appPin: undefined,
     theme: 'system',
     notificationsEnabled: false,
+    autoBackupEnabled: false,
+    backupFrequency: 'weekly',
+    backupTime: '09:00',
+    lastBackupAt: undefined,
 };
 
 class SettingsService {

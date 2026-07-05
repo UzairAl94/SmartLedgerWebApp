@@ -19,6 +19,7 @@ import { categoryService } from './services/categoryService';
 import { budgetService } from './services/budgetService';
 import { recurringService } from './services/recurringService';
 import { notificationService } from './services/notificationService';
+import { backupService } from './services/backupService';
 import { settingsService } from './services/settingsService';
 import { convertCurrency } from './utils/format';
 import { setDate, subMonths, startOfDay, isAfter, parseISO } from 'date-fns';
@@ -75,6 +76,8 @@ const App: React.FC = () => {
         recurringPostedRef.current = await recurringService.materializeDue();
         // Reconcile balances on entry so totals are always correct.
         await transactionService.recalculateBalances();
+        // Run a scheduled backup if one is due (guards itself internally).
+        backupService.maybeRunScheduledBackup();
         console.log('Database initialized successfully from App');
         setIsDbReady(true);
       } catch (error) {
@@ -138,6 +141,16 @@ const App: React.FC = () => {
       unsubRecurring();
       unsubSettings();
     };
+  }, [isDbReady]);
+
+  // Re-check scheduled backup when the app returns to the foreground.
+  useEffect(() => {
+    if (!isDbReady) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') backupService.maybeRunScheduledBackup();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [isDbReady]);
 
   // Apply theme: toggle the `dark` class on <html> based on the setting.

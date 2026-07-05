@@ -76,4 +76,8 @@ export interface UserSettings {
   appPin?: string; // SHA-256 hash of the 4-digit PIN
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
+  autoBackupEnabled: boolean;
+  backupFrequency: 'daily' | 'weekly' | 'monthly';
+  backupTime: string; // 'HH:mm' — soft threshold for the launch-time due-check
+  lastBackupAt?: string; // ISO of last successful auto-backup
 }
