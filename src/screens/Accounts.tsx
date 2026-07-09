@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
-import { Plus, Banknote, Trash2, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Banknote, Trash2, Eye, EyeOff, Mic, Loader2, Info } from 'lucide-react';
 import { accountService } from '../services/accountService';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { isAmountHidden, MASK } from '../utils/visibility';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import { secretsService, SECRET_KEYS } from '../services/secretsService';
+import { deepSeekService } from '../services/deepSeekService';
+import { accountLedger } from '../services/accountLedger';
+import { LedgerValidationError } from '../services/ledgerEngine';
 import type { Account, Transaction, Category, UserSettings } from '../types';
 import BottomSheet from '../components/ui/BottomSheet';
 
@@ -26,6 +31,56 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
     const [isDeleting, setIsDeleting] = useState(false);
     const [showAmounts, setShowAmounts] = useState(false);
 
+    // --- Voice add/update accounts ---
+    const [voiceText, setVoiceText] = useState<string | null>(null);
+    const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+    const [processing, setProcessing] = useState(false);
+    const [procError, setProcError] = useState<string | null>(null);
+    const [hasVoiceKeys, setHasVoiceKeys] = useState(false);
+
+    const { isRecording, isProcessing: isTranscribing, startRecording, stopRecording, error: voiceError } = useVoiceInput((text) => {
+        setVoiceText(text);
+        setProcError(null);
+    });
+
+    useEffect(() => {
+        Promise.all([
+            secretsService.getKey(SECRET_KEYS.elevenLabs),
+            secretsService.getKey(SECRET_KEYS.deepSeek),
+        ]).then(([el, ds]) => setHasVoiceKeys(!!el && !!ds));
+    }, []);
+
+    const handleMicClick = () => {
+        if (isRecording) { stopRecording(); return; }
+        if (!hasVoiceKeys) {
+            setVoiceNotice('Add your ElevenLabs and DeepSeek API keys in Settings to use voice.');
+            return;
+        }
+        setVoiceNotice(null);
+        startRecording();
+    };
+
+    const handleProcessVoice = async () => {
+        if (!voiceText) return;
+        setProcessing(true);
+        setProcError(null);
+        try {
+            const apiKey = await secretsService.getKey(SECRET_KEYS.deepSeek);
+            if (!apiKey) throw new Error('DeepSeek API Key not configured. Add it in Settings.');
+            const parsed = await deepSeekService.parseAccount(voiceText, apiKey, accounts.map(a => a.name));
+            await accountLedger.processAccount(parsed, accounts);
+            setVoiceText(null);
+        } catch (error) {
+            if (error instanceof LedgerValidationError || error instanceof Error) {
+                setProcError(error.message);
+            } else {
+                setProcError('Failed to process. Please try again.');
+            }
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     return (
         <div className="flex flex-col gap-6 pb-8">
             <section className="bg-white p-6 rounded-3xl shadow-premium flex flex-col items-center text-center gap-1 border border-black/5 relative">
@@ -43,13 +98,35 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
             <section className="flex flex-col gap-3">
                 <div className="flex justify-between items-center px-1">
                     <h3 className="text-[16px] font-bold">Your Accounts</h3>
-                    <button
-                        onClick={onAddAccount}
-                        className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center active:scale-95 transition-transform"
-                    >
-                        <Plus size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleMicClick}
+                            disabled={isTranscribing}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${isRecording ? 'bg-expense text-white animate-pulse' : 'bg-bg-secondary text-text-muted border border-black/5'} disabled:opacity-50`}
+                            title="Add or update by voice"
+                        >
+                            {isTranscribing ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
+                        </button>
+                        <button
+                            onClick={onAddAccount}
+                            className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center active:scale-95 transition-transform"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </div>
                 </div>
+
+                {voiceNotice && (
+                    <div className="p-3 bg-warning/10 border border-warning/20 rounded-2xl flex items-start gap-2">
+                        <Info size={16} className="text-warning shrink-0 mt-0.5" />
+                        <p className="text-[12px] font-semibold text-text-secondary">{voiceNotice}</p>
+                    </div>
+                )}
+                {voiceError && (
+                    <div className="p-3 bg-expense/10 border border-expense/20 rounded-2xl">
+                        <p className="text-[12px] font-semibold text-expense">{voiceError}</p>
+                    </div>
+                )}
 
                 <section className="flex flex-col gap-4">
                     {accounts.map((account: Account) => (
@@ -167,6 +244,40 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                         </div>
                     </div>
                 )}
+            </BottomSheet>
+
+            <BottomSheet
+                isOpen={!!voiceText}
+                onClose={() => { setVoiceText(null); setProcError(null); }}
+                title="Voice Command"
+            >
+                <div className="flex flex-col gap-6 py-4">
+                    <div className="bg-bg-primary p-6 rounded-2xl border border-black/5 min-h-[100px] flex items-center justify-center text-center">
+                        <p className="text-[17px] font-semibold text-text-primary leading-relaxed italic">"{voiceText}"</p>
+                    </div>
+
+                    {procError && (
+                        <div className="bg-expense/10 border border-expense/20 p-4 rounded-2xl">
+                            <p className="text-[13px] font-semibold text-expense">{procError}</p>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={handleProcessVoice}
+                            disabled={processing}
+                            className="w-full py-4 bg-primary text-white rounded-2xl font-bold text-[15px] shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {processing ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Processing...</>) : 'Apply'}
+                        </button>
+                        <button
+                            onClick={() => { setVoiceText(null); setProcError(null); }}
+                            className="w-full py-3 bg-bg-secondary text-text-secondary rounded-2xl font-semibold text-[14px] active:scale-95 transition-all"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
             </BottomSheet>
         </div>
     );

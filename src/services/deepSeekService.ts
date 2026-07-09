@@ -50,6 +50,35 @@ JSON fields:
 - note (string or null)
 `;
 
+export interface ParsedAccount {
+    action: 'add' | 'update' | null;
+    name: string | null;        // new/updated account name
+    type: 'Bank' | 'Cash' | 'Investment' | null;
+    currency: 'PKR' | 'USD' | 'AED' | 'MYR' | null;
+    initialBalance: number | null;
+    targetAccount: string | null; // for updates: which existing account to change
+}
+
+const getAccountSystemPrompt = (accounts: string[]) => `
+You are a strict JSON parser for a personal finance app's ACCOUNTS.
+
+Convert a spoken command into a structured JSON object describing an account add or update.
+
+Existing Accounts: ${accounts.join(', ') || 'None'}
+
+Rules:
+- Output ONLY valid JSON. No explanations or markdown.
+- action: "add" to create a new account, "update" to modify an existing one. null if unclear.
+- For "update", targetAccount MUST be the account being changed; match the user's words to an entry in Existing Accounts (abbreviation/partial/fuzzy → use the EXACT name from the list).
+- name: for add = the new account's name; for update = the new name IF the user renames it, else null.
+- Only include fields the user actually stated; set everything else to null.
+- Allowed types: Bank, Cash, Investment (Proper Case).
+- Allowed currencies: PKR, USD, AED, MYR. Detect from keywords (dollars→USD, dirhams→AED, rupees→PKR, ringgit→MYR).
+- initialBalance must be a NUMBER; normalize large numbers ("5 thousand" → 5000).
+
+JSON fields: action, name, type, currency, initialBalance, targetAccount.
+`;
+
 export const deepSeekService = {
     parseTransaction: async (text: string, apiKey: string, accounts: string[] = [], categories: string[] = []): Promise<ParsedTransaction> => {
         if (!apiKey) {
@@ -84,6 +113,37 @@ export const deepSeekService = {
             return result;
         } catch (error) {
             console.error("DeepSeek Parsing Error:", error);
+            throw error;
+        }
+    },
+
+    parseAccount: async (text: string, apiKey: string, accounts: string[] = []): Promise<ParsedAccount> => {
+        if (!apiKey) throw new Error("DeepSeek API Key is missing");
+
+        const normalizedText = normalizeVoiceText(text);
+        const openai = new OpenAI({
+            baseURL: 'https://api.deepseek.com',
+            apiKey,
+            dangerouslyAllowBrowser: true,
+        });
+
+        try {
+            const completion = await openai.chat.completions.create({
+                messages: [
+                    { role: "system", content: getAccountSystemPrompt(accounts) },
+                    { role: "user", content: normalizedText },
+                ],
+                model: "deepseek-chat",
+            });
+
+            const content = completion.choices[0].message.content;
+            if (!content) throw new Error("No content received from DeepSeek");
+            const jsonString = content.replace(/```json\n|\n```/g, '').trim();
+            const result = JSON.parse(jsonString) as ParsedAccount;
+            console.log("DeepSeek Account Parsing Result:", result);
+            return result;
+        } catch (error) {
+            console.error("DeepSeek Account Parsing Error:", error);
             throw error;
         }
     }
