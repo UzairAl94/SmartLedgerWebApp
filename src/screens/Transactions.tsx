@@ -178,7 +178,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
                                 placeholder="Min amount"
                                 value={minAmount}
                                 onChange={(e) => setMinAmount(e.target.value)}
-                                className="flex-1 bg-bg-primary border border-black/5 p-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                                className="flex-1 min-w-0 w-full bg-bg-primary border border-black/5 p-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
                             />
                             <span className="text-text-muted text-[13px]">–</span>
                             <input
@@ -186,7 +186,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
                                 placeholder="Max amount"
                                 value={maxAmount}
                                 onChange={(e) => setMaxAmount(e.target.value)}
-                                className="flex-1 bg-bg-primary border border-black/5 p-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                                className="flex-1 min-w-0 w-full bg-bg-primary border border-black/5 p-2.5 rounded-xl text-[13px] font-semibold outline-none focus:ring-2 focus:ring-primary/20"
                             />
                         </div>
                         {(categoryFilter || minAmount || maxAmount) && (
@@ -222,7 +222,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
                 ) : (
                     Object.entries(groupedTransactions).map(([dateLabel, txs]) => (
                         <div key={dateLabel}>
-                            <h5 className="text-[12px] font-bold text-text-muted uppercase tracking-widest mb-3 px-1 sticky top-[240px] z-0">{dateLabel}</h5>
+                            <h5 className="text-[12px] font-bold text-text-muted uppercase tracking-widest mb-3 px-1">{dateLabel}</h5>
                             <div className="flex flex-col gap-2">
                                 {txs.map((tx: Transaction) => {
                                     const category = tx.categoryId ? categories.find((c: Category) => c.id === tx.categoryId) : null;
