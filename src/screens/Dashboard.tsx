@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2, Info } from 'lucide-react';
+import { Mic, Square, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2, Info } from 'lucide-react';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { isAmountHidden, MASK } from '../utils/visibility';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -138,8 +138,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
                     >
                         {isProcessing ? (
                             <Loader2 size={24} className="animate-spin text-primary" />
+                        ) : isRecording ? (
+                            <Square size={22} fill="currentColor" />
                         ) : (
-                            <Mic size={24} className={isRecording ? 'animate-bounce' : ''} />
+                            <Mic size={24} />
                         )}
                         <span>{isRecording ? 'Stop' : isProcessing ? 'Processing...' : 'Voice Input'}</span>
                     </button>

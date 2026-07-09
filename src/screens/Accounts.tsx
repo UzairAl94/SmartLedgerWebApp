@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Banknote, Trash2, Eye, EyeOff, Mic, Loader2, Info } from 'lucide-react';
+import { Plus, Banknote, Trash2, Eye, EyeOff, Mic, Square, Loader2, Info } from 'lucide-react';
 import { accountService } from '../services/accountService';
 import { formatCurrency, convertCurrency } from '../utils/format';
 import { isAmountHidden, MASK } from '../utils/visibility';
@@ -115,7 +115,7 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                             className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${isRecording ? 'bg-expense text-white animate-pulse' : 'bg-bg-secondary text-text-muted border border-black/5'} disabled:opacity-50`}
                             title="Add or update by voice"
                         >
-                            {isTranscribing ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
+                            {isTranscribing ? <Loader2 size={16} className="animate-spin" /> : isRecording ? <Square size={15} fill="currentColor" /> : <Mic size={16} />}
                         </button>
                         <button
                             onClick={onAddAccount}
