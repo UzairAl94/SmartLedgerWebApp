@@ -51,7 +51,7 @@ JSON fields:
 `;
 
 export interface ParsedAccount {
-    action: 'add' | 'update' | null;
+    action: 'add' | 'update' | 'delete' | null;
     name: string | null;        // new/updated account name
     type: 'Bank' | 'Cash' | 'Investment' | null;
     currency: 'PKR' | 'USD' | 'AED' | 'MYR' | null;
@@ -68,8 +68,9 @@ Existing Accounts: ${accounts.join(', ') || 'None'}
 
 Rules:
 - Output ONLY valid JSON. No explanations or markdown.
-- action: "add" to create a new account, "update" to modify an existing one. null if unclear.
-- For "update", targetAccount MUST be the account being changed; match the user's words to an entry in Existing Accounts (abbreviation/partial/fuzzy → use the EXACT name from the list).
+- action: "add" to create a new account, "update" to modify an existing one, "delete" to remove one. null if unclear.
+- For "update" and "delete", targetAccount MUST be the account being changed/removed; match the user's words to an entry in Existing Accounts (abbreviation/partial/fuzzy → use the EXACT name from the list).
+- Treat "delete", "remove", "get rid of" as action "delete".
 - name: for add = the new account's name; for update = the new name IF the user renames it, else null.
 - Only include fields the user actually stated; set everything else to null.
 - Allowed types: Bank, Cash, Investment (Proper Case).

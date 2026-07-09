@@ -68,6 +68,16 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
             const apiKey = await secretsService.getKey(SECRET_KEYS.deepSeek);
             if (!apiKey) throw new Error('DeepSeek API Key not configured. Add it in Settings.');
             const parsed = await deepSeekService.parseAccount(voiceText, apiKey, accounts.map(a => a.name));
+
+            // Extra guard for the destructive path — deleting an account also
+            // permanently removes all of its transactions.
+            if (parsed.action === 'delete') {
+                const ok = window.confirm(
+                    `Delete account "${parsed.targetAccount || ''}"? This permanently deletes all of its transactions and cannot be undone.`
+                );
+                if (!ok) { setProcessing(false); return; }
+            }
+
             await accountLedger.processAccount(parsed, accounts);
             setVoiceText(null);
         } catch (error) {

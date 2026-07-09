@@ -75,6 +75,17 @@ export const accountLedger = {
             return;
         }
 
-        throw new LedgerValidationError("Couldn't tell whether to add or update an account. Try again.");
+        if (parsed.action === 'delete') {
+            const target = resolveByName(accounts, parsed.targetAccount);
+            if (!target) {
+                throw new LedgerValidationError(
+                    `Couldn't find an account matching "${parsed.targetAccount || ''}".`
+                );
+            }
+            await accountService.deleteAccount(target.id);
+            return;
+        }
+
+        throw new LedgerValidationError("Couldn't tell whether to add, update, or delete an account. Try again.");
     },
 };
