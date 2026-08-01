@@ -25,6 +25,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
     const [fee, setFee] = useState(transactionToEdit?.fee?.toString() || '');
     const [showFee, setShowFee] = useState(!!transactionToEdit?.fee);
     const [currency, setCurrency] = useState<Currency>(transactionToEdit?.currency || 'PKR');
+    // yyyy-MM-dd for the date input (local today for new, existing day for edit).
+    const [dateVal, setDateVal] = useState(
+        transactionToEdit?.date ? transactionToEdit.date.slice(0, 10) : new Date().toLocaleDateString('en-CA')
+    );
     const [hideAmount, setHideAmount] = useState(!!transactionToEdit?.hidden);
     const [receiptPath, setReceiptPath] = useState(transactionToEdit?.receiptPath || '');
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null);
@@ -110,7 +114,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                 amount: parseFloat(amount),
                 currency: currency, // Use selected currency
                 accountId,
-                date: transactionToEdit?.date || new Date().toISOString(),
+                // Keep the original timestamp if the day is unchanged on edit;
+                // otherwise use noon UTC of the chosen day (avoids timezone drift).
+                date: (transactionToEdit && transactionToEdit.date.slice(0, 10) === dateVal)
+                    ? transactionToEdit.date
+                    : `${dateVal}T12:00:00.000Z`,
                 note,
                 type,
                 fee: showFee && fee ? parseFloat(fee) : null,
@@ -281,6 +289,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                         </select>
                     </div>
                 )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest px-1">Date</label>
+                <input
+                    type="date"
+                    value={dateVal}
+                    onChange={(e) => setDateVal(e.target.value)}
+                    className="w-full bg-white border border-black/5 p-4 rounded-2xl text-[14px] font-semibold focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                />
             </div>
 
             <div className="flex flex-col gap-2">
