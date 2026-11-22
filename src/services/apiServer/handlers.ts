@@ -729,6 +729,9 @@ export const deleteRecurring: Handler = async ({ params }) => {
 const redactSettings = (settings: UserSettings) => {
     const result: Record<string, unknown> = { ...settings };
     delete result.appPin;
+    // Older backups stored these in settings; never expose them over the API.
+    delete result.deepSeekApiKey;
+    delete result.elevenLabsApiKey;
     result.hasPin = !!settings.appPin;
     return result;
 };

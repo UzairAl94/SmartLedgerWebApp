@@ -79,6 +79,8 @@ const App: React.FC = () => {
         console.log('Initializing database from App...');
         await sqliteService.initialize();
         await secretsService.seedFromEnvIfEmpty();
+        // Move keys out of legacy restored settings into secure storage.
+        await secretsService.migrateLegacySettingsKeys();
         // Auto-post any due recurring transactions (catch-up since last launch).
         // Non-fatal: one broken rule must not block the app from starting.
         try {

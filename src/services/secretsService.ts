@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
+import { sqliteService } from './sqliteService';
 
 // Secret keys held outside the settings JSON.
 export const SECRET_KEYS = {
@@ -7,6 +8,12 @@ export const SECRET_KEYS = {
     elevenLabs: 'eleven_labs_api_key',
     apiToken: 'api_server_token',
 } as const;
+
+const SETTINGS_KEY = 'user_preferences';
+const LEGACY_SETTINGS_KEYS: Array<{ legacy: string; secret: string }> = [
+    { legacy: 'deepSeekApiKey', secret: SECRET_KEYS.deepSeek },
+    { legacy: 'elevenLabsApiKey', secret: SECRET_KEYS.elevenLabs },
+];
 
 const isWeb = () => Capacitor.getPlatform() === 'web';
 const webKey = (key: string) => `secret_${key}`;
@@ -50,6 +57,47 @@ export const secretsService = {
             await SecureStoragePlugin.remove({ key });
         } catch {
             // Already absent — ignore.
+        }
+    },
+
+    /**
+     * One-time migration: older builds stored the AI API keys inside the
+     * settings JSON (which also put them in backups and exposed them to the
+     * API). Move them into secure storage and remove them from settings.
+     */
+    async migrateLegacySettingsKeys(): Promise<void> {
+        try {
+            const result = await sqliteService.query('SELECT value FROM settings WHERE key = ?', [SETTINGS_KEY]);
+            const raw = result.values?.[0]?.value;
+            if (typeof raw !== 'string') return;
+
+            let parsed: Record<string, unknown>;
+            try {
+                parsed = JSON.parse(raw) as Record<string, unknown>;
+            } catch {
+                return;
+            }
+
+            let changed = false;
+            for (const { legacy, secret } of LEGACY_SETTINGS_KEYS) {
+                const value = parsed[legacy];
+                if (typeof value !== 'string' || !value.trim()) continue;
+
+                const existing = await secretsService.getKey(secret);
+                if (!existing) await secretsService.setKey(secret, value.trim());
+
+                delete parsed[legacy];
+                changed = true;
+            }
+
+            if (changed) {
+                await sqliteService.execute(
+                    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                    [SETTINGS_KEY, JSON.stringify(parsed)]
+                );
+            }
+        } catch (error) {
+            console.error('Failed to migrate legacy API keys:', error);
         }
     },
 
