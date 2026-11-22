@@ -118,6 +118,8 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                     return;
                 }
                 await settingsService.updateSettings({ apiServerPort: port });
+                // The foreground service needs a notification to stay alive.
+                await notificationService.requestPermission().catch(() => false);
                 await apiServer.start({ port });
                 // The token is generated on first start.
                 const token = await apiServer.getToken();
@@ -731,7 +733,7 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                         )}
 
                         <p className="text-[11px] text-text-muted leading-relaxed">
-                            Keep the app open while using the API. Traffic on your Wi-Fi is not encrypted — use this on a trusted network.
+                            The server keeps running in the background behind an ongoing notification until you stop it. Traffic on your Wi-Fi is not encrypted — use this on a trusted network.
                         </p>
                     </div>
                 </div>

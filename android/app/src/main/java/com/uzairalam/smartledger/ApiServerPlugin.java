@@ -2,8 +2,13 @@ package com.uzairalam.smartledger;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
+
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -88,6 +93,7 @@ public class ApiServerPlugin extends Plugin {
             };
             server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
             acquireWakeLock();
+            startForegroundService();
             call.resolve(status());
         } catch (Exception error) {
             Log.e(TAG, "Failed to start API server", error);
@@ -138,6 +144,44 @@ public class ApiServerPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         stopServerInternal();
+    }
+
+    @Override
+    protected void handleOnStop() {
+        super.handleOnStop();
+        if (server != null && server.isAlive()) {
+            // Capacitor/Cordova may pause WebView timers after the activity stops.
+            // Re-enable them shortly afterwards so API requests can still run.
+            new Handler(Looper.getMainLooper()).postDelayed(this::resumeWebView, 500);
+        }
+    }
+
+    private void startForegroundService() {
+        try {
+            Intent intent = new Intent(getContext(), ApiServerService.class);
+            ContextCompat.startForegroundService(getContext(), intent);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not start foreground service", error);
+        }
+    }
+
+    private void stopForegroundService() {
+        try {
+            getContext().stopService(new Intent(getContext(), ApiServerService.class));
+        } catch (Exception error) {
+            Log.w(TAG, "Could not stop foreground service", error);
+        }
+    }
+
+    private void resumeWebView() {
+        try {
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().resumeTimers();
+                getBridge().getWebView().onResume();
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "Could not resume WebView timers", error);
+        }
     }
 
     private NanoHTTPD.Response handleRequest(NanoHTTPD.IHTTPSession session) {
@@ -196,7 +240,10 @@ public class ApiServerPlugin extends Plugin {
         }
         payload.put("headers", headers);
 
-        activity.runOnUiThread(() -> notifyListeners("request", payload));
+        activity.runOnUiThread(() -> {
+            resumeWebView();
+            notifyListeners("request", payload);
+        });
 
         try {
             return withCors(future.get(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS));
@@ -224,6 +271,7 @@ public class ApiServerPlugin extends Plugin {
         }
         pending.clear();
         releaseWakeLock();
+        stopForegroundService();
     }
 
     private boolean isAuthorized(NanoHTTPD.IHTTPSession session) {
