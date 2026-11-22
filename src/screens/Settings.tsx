@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat, Cloud, Clock } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat, Cloud, Clock, Server, Copy, Check, Power, AlertTriangle } from 'lucide-react';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
 import { transactionService } from '../services/transactionService';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
 import { notificationService } from '../services/notificationService';
+import { apiServer } from '../services/apiServer';
+import type { ApiServerState } from '../services/apiServer';
 import BottomSheet from '../components/ui/BottomSheet';
 import PinSetup from '../components/security/PinSetup';
 import type { UserSettings } from '../types';
@@ -24,6 +26,14 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
     const [pinSheet, setPinSheet] = useState<null | 'set-enable' | 'change'>(null);
     const [recomputing, setRecomputing] = useState(false);
     const [driveBusy, setDriveBusy] = useState(false);
+
+    // Local API server
+    const [apiState, setApiState] = useState<ApiServerState>(() => apiServer.getState());
+    const [apiBusy, setApiBusy] = useState(false);
+    const [apiToken, setApiToken] = useState('');
+    const [showApiToken, setShowApiToken] = useState(false);
+    const [apiPort, setApiPort] = useState('8765');
+    const [copied, setCopied] = useState<string | null>(null);
 
     const handleDriveBackup = async () => {
         setDriveBusy(true);
@@ -48,6 +58,18 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
 
     useEffect(() => { loadKeys(); }, []);
 
+    useEffect(() => {
+        const unsubscribe = apiServer.subscribe(setApiState);
+        apiServer.refreshStatus().catch(() => { /* not available on web */ });
+        apiServer.getToken().then(token => setApiToken(token || '')).catch(() => {});
+        return unsubscribe;
+    }, []);
+
+    const apiServerPortSetting = settings?.apiServerPort;
+    useEffect(() => {
+        if (apiServerPortSetting !== undefined) setApiPort(String(apiServerPortSetting));
+    }, [apiServerPortSetting]);
+
     const handleSaveKeys = async () => {
         setKeysSaving(true);
         try {
@@ -63,6 +85,85 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
         loadKeys(); // discard edits
         setKeysLocked(true);
     };
+
+    const copyText = async (value: string, key: string) => {
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
+            } else {
+                const element = document.createElement('textarea');
+                element.value = value;
+                document.body.appendChild(element);
+                element.select();
+                document.execCommand('copy');
+                document.body.removeChild(element);
+            }
+            setCopied(key);
+            window.setTimeout(() => setCopied(null), 1500);
+        } catch {
+            alert('Could not copy. Select the text and copy it manually.');
+        }
+    };
+
+    const handleApiToggle = async () => {
+        if (apiBusy) return;
+        setApiBusy(true);
+        try {
+            if (apiState.running) {
+                await apiServer.stop();
+            } else {
+                const port = Number.parseInt(apiPort, 10);
+                if (Number.isNaN(port) || port < 1024 || port > 65535) {
+                    alert('Port must be between 1024 and 65535.');
+                    return;
+                }
+                await settingsService.updateSettings({ apiServerPort: port });
+                await apiServer.start({ port });
+                // The token is generated on first start.
+                const token = await apiServer.getToken();
+                setApiToken(token || '');
+            }
+        } catch (error) {
+            alert('API server: ' + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            setApiBusy(false);
+        }
+    };
+
+    const handleApiLanToggle = async (enabled: boolean) => {
+        handleUpdateSettings({ apiServerAllowLan: enabled });
+        if (!apiState.running) return;
+
+        setApiBusy(true);
+        try {
+            const port = Number.parseInt(apiPort, 10) || apiState.port;
+            await apiServer.stop();
+            await apiServer.start({ port, allowLan: enabled });
+        } catch (error) {
+            alert('API server: ' + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            setApiBusy(false);
+        }
+    };
+
+    const handleRegenerateApiToken = async () => {
+        if (!confirm('Regenerate the API token? Any client using the old token will stop working.')) return;
+        setApiBusy(true);
+        try {
+            const token = await apiServer.regenerateToken();
+            setApiToken(token);
+        } catch (error) {
+            alert('Could not regenerate the token: ' + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            setApiBusy(false);
+        }
+    };
+
+    const apiBaseUrl = apiState.addresses.length > 0
+        ? `http://${apiState.addresses[0]}:${apiState.port}`
+        : `http://127.0.0.1:${apiState.port}`;
+
+    const connectionJson = JSON.stringify({ baseUrl: apiBaseUrl, token: apiToken }, null, 2);
 
     useEffect(() => {
         const handler = (e: any) => {
@@ -473,6 +574,166 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             <span className="text-[12px] text-text-muted">{driveBusy ? 'Preparing…' : 'Choose Drive in the share sheet'}</span>
                         </div>
                     </button>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Local API</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between p-4 border-b border-black/5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+                                <Server size={20} />
+                            </div>
+                            <div>
+                                <span className="block font-semibold text-[15px]">Local API Server</span>
+                                <span className="text-[12px] text-text-muted">
+                                    {!apiState.available
+                                        ? 'Available in the Android app only'
+                                        : apiState.running
+                                            ? `Running on port ${apiState.port}`
+                                            : 'Stopped'}
+                                </span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleApiToggle}
+                            disabled={!apiState.available || apiBusy}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[13px] text-white active:scale-95 transition-all disabled:opacity-40 ${apiState.running ? 'bg-expense' : 'bg-primary'}`}
+                        >
+                            {apiBusy ? <RefreshCw size={15} className="animate-spin" /> : <Power size={15} />}
+                            {apiState.running ? 'Stop' : 'Start'}
+                        </button>
+                    </div>
+
+                    {apiState.error && (
+                        <div className="flex items-start gap-2 px-4 py-3 bg-expense/10 border-b border-expense/20">
+                            <AlertTriangle size={15} className="text-expense shrink-0 mt-0.5" />
+                            <span className="text-[12px] font-semibold text-expense break-words">{apiState.error}</span>
+                        </div>
+                    )}
+
+                    <div className="p-4 flex flex-col gap-4 border-b border-black/5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[14px] font-semibold text-text-secondary">Port</span>
+                            <input
+                                type="number"
+                                min={1024}
+                                max={65535}
+                                value={apiPort}
+                                disabled={apiState.running}
+                                onChange={(e) => setApiPort(e.target.value)}
+                                onBlur={() => {
+                                    const port = Number.parseInt(apiPort, 10);
+                                    if (!Number.isNaN(port) && port >= 1024 && port <= 65535) {
+                                        handleUpdateSettings({ apiServerPort: port });
+                                    }
+                                }}
+                                className="w-28 text-[14px] font-bold text-text-primary bg-white border border-black/5 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-bg-primary disabled:opacity-60"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <span className="block text-[14px] font-semibold text-text-secondary">Allow access from other devices</span>
+                                <span className="text-[11px] text-text-muted">Binds 0.0.0.0 on your Wi-Fi network</span>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                    type="checkbox"
+                                    checked={settings.apiServerAllowLan}
+                                    onChange={(e) => handleApiLanToggle(e.target.checked)}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
+                        </div>
+
+                        {apiState.running && (
+                            <div className="flex flex-col gap-2 bg-bg-primary rounded-xl p-3 border border-black/5">
+                                <span className="text-[11px] font-bold text-text-muted uppercase tracking-widest">Addresses</span>
+                                {apiState.addresses.length === 0 ? (
+                                    <span className="text-[12px] text-text-muted">No LAN address detected.</span>
+                                ) : apiState.addresses.map(address => {
+                                    const url = `http://${address}:${apiState.port}`;
+                                    return (
+                                        <div key={address} className="flex items-center justify-between gap-2">
+                                            <code className="text-[11px] font-mono text-text-primary break-all">{url}</code>
+                                            <button
+                                                onClick={() => copyText(url, address)}
+                                                className="w-8 h-8 shrink-0 rounded-lg bg-white border border-black/5 flex items-center justify-center text-text-muted active:scale-95"
+                                            >
+                                                {copied === address ? <Check size={14} className="text-income" /> : <Copy size={14} />}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 flex flex-col gap-3 border-b border-black/5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[14px] font-semibold text-text-secondary">Access token</span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowApiToken(value => !value)}
+                                    className="text-[12px] font-bold text-primary px-2 py-1"
+                                >
+                                    {showApiToken ? 'Hide' : 'Show'}
+                                </button>
+                                <button
+                                    onClick={() => copyText(apiToken, 'token')}
+                                    disabled={!apiToken}
+                                    className="w-8 h-8 rounded-lg bg-bg-primary border border-black/5 flex items-center justify-center text-text-muted active:scale-95 disabled:opacity-40"
+                                >
+                                    {copied === 'token' ? <Check size={14} className="text-income" /> : <Copy size={14} />}
+                                </button>
+                                <button
+                                    onClick={handleRegenerateApiToken}
+                                    disabled={apiBusy}
+                                    className="w-8 h-8 rounded-lg bg-bg-primary border border-black/5 flex items-center justify-center text-text-muted active:scale-95 disabled:opacity-40"
+                                >
+                                    <RefreshCw size={14} className={apiBusy ? 'animate-spin' : ''} />
+                                </button>
+                            </div>
+                        </div>
+                        <code className="block break-all bg-bg-primary border border-black/5 rounded-xl p-3 text-[11px] font-mono text-text-primary">
+                            {apiToken ? (showApiToken ? apiToken : '•'.repeat(32)) : 'Not generated yet — start the server.'}
+                        </code>
+                        <p className="text-[11px] text-text-muted">
+                            Keep this secret. Anyone with it can read and change your ledger.
+                        </p>
+                    </div>
+
+                    <div className="p-4 flex flex-col gap-3">
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => copyText(connectionJson, 'connection')}
+                                disabled={!apiToken}
+                                className="w-full py-2.5 bg-bg-primary border border-black/5 text-text-primary rounded-xl font-bold text-[13px] active:scale-95 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                            >
+                                {copied === 'connection' ? <Check size={15} className="text-income" /> : <Copy size={15} />}
+                                Copy connection details
+                            </button>
+                        </div>
+
+                        {apiState.log.length > 0 && (
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-[11px] font-bold text-text-muted uppercase tracking-widest">Recent requests</span>
+                                {apiState.log.slice(0, 5).map((entry, index) => (
+                                    <div key={`${entry.at}-${index}`} className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                                        <span className="text-text-secondary truncate">{entry.method} {entry.path}</span>
+                                        <span className={entry.status >= 400 ? 'text-expense' : 'text-income'}>{entry.status} · {entry.ms}ms</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <p className="text-[11px] text-text-muted leading-relaxed">
+                            Keep the app open while using the API. Traffic on your Wi-Fi is not encrypted — use this on a trusted network.
+                        </p>
+                    </div>
                 </div>
             </section>
 

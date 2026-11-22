@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(CapacitorSQLitePlugin.class);
+        registerPlugin(ApiServerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

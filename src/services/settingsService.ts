@@ -23,6 +23,8 @@ const DEFAULT_SETTINGS: UserSettings = {
     backupFrequency: 'weekly',
     backupTime: '09:00',
     lastBackupAt: undefined,
+    apiServerPort: 8765,
+    apiServerAllowLan: true,
 };
 
 class SettingsService {

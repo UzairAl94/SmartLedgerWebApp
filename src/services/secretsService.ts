@@ -5,6 +5,7 @@ import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 export const SECRET_KEYS = {
     deepSeek: 'deepseek_api_key',
     elevenLabs: 'eleven_labs_api_key',
+    apiToken: 'api_server_token',
 } as const;
 
 const isWeb = () => Capacitor.getPlatform() === 'web';

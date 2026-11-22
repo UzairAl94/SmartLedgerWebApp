@@ -37,6 +37,8 @@ export interface Transaction {
   fee?: number;
   receiptPath?: string; // relative path under Filesystem Directory.Data, e.g. receipts/<uuid>.jpg
   hidden?: number; // 1 = mask the amount in the UI (still counted in totals)
+  externalId?: string; // caller-supplied idempotency key (e.g. statement row id)
+  importBatchId?: string; // groups rows created by one API import; enables undo
 }
 
 export interface Budget {
@@ -80,4 +82,6 @@ export interface UserSettings {
   backupFrequency: 'daily' | 'weekly' | 'monthly';
   backupTime: string; // 'HH:mm' — soft threshold for the launch-time due-check
   lastBackupAt?: string; // ISO of last successful auto-backup
+  apiServerPort: number; // local API port (Android server)
+  apiServerAllowLan: boolean; // bind 0.0.0.0 so other devices can reach it
 }

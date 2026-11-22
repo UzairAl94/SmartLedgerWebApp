@@ -27,6 +27,7 @@ import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
 import { sqliteService } from './services/sqliteService';
 import { secretsService, SECRET_KEYS } from './services/secretsService';
+import { apiServer } from './services/apiServer';
 import LockScreen from './components/security/LockScreen';
 import { Cloud, Loader2 } from 'lucide-react';
 import type { Account, Transaction, Category, UserSettings, Budget, RecurringTransaction } from './types';
@@ -64,6 +65,12 @@ const App: React.FC = () => {
 
   // Navigation State
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
+
+  // Register the local API request listener once. It stays inert until the
+  // server is started from Settings.
+  useEffect(() => {
+    apiServer.init().catch(error => console.error('Failed to initialize API server:', error));
+  }, []);
 
   // Database Initialization
   useEffect(() => {

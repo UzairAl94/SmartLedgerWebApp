@@ -42,6 +42,18 @@ class TransactionService {
         return (result.values || []) as Transaction[];
     }
 
+    async getTransactionById(id: string): Promise<Transaction | null> {
+        const result = await sqliteService.query('SELECT * FROM transactions WHERE id = ?', [id]);
+        const rows = (result.values || []) as Transaction[];
+        return rows[0] || null;
+    }
+
+    async findByExternalId(externalId: string): Promise<Transaction | null> {
+        const result = await sqliteService.query('SELECT * FROM transactions WHERE externalId = ?', [externalId]);
+        const rows = (result.values || []) as Transaction[];
+        return rows[0] || null;
+    }
+
     // Count transactions touching an account (as source or transfer destination).
     // Two single-column queries because the web provider only supports a single `WHERE col = ?`.
     async countForAccount(accountId: string): Promise<number> {
@@ -86,8 +98,8 @@ class TransactionService {
 
             // Create the transaction record
             await db.run(
-                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0]
+                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden, externalId, importBatchId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null]
             );
 
             // Update source account balance
@@ -113,6 +125,23 @@ class TransactionService {
             await this.recalculateBalances();
         }
         return id;
+    }
+
+    // Insert a validated batch in one SQLite transaction, then reconcile once.
+    async createTransactionsBatch(txs: Omit<Transaction, 'id'>[]): Promise<string[]> {
+        const ids: string[] = [];
+        await sqliteService.transaction(async (db) => {
+            for (const tx of txs) {
+                const id = crypto.randomUUID();
+                ids.push(id);
+                await db.run(
+                    'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden, externalId, importBatchId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null]
+                );
+            }
+        });
+        await this.recalculateBalances();
+        return ids;
     }
 
     // Delete transaction and revert account balance atomically
@@ -158,6 +187,26 @@ class TransactionService {
 
         // Recompute all balances from scratch so totals are always correct,
         // instead of relying on incremental updates that can drift.
+        await this.recalculateBalances();
+    }
+
+    // Delete a set of rows in one SQLite transaction, then reconcile once.
+    async deleteTransactionsBatch(txs: Transaction[]): Promise<void> {
+        if (txs.length === 0) return;
+        const receiptPaths = txs
+            .map(t => t.receiptPath)
+            .filter((p): p is string => !!p);
+
+        await sqliteService.transaction(async (db) => {
+            for (const tx of txs) {
+                await db.run('DELETE FROM transactions WHERE id = ?', [tx.id]);
+            }
+        });
+
+        for (const path of receiptPaths) {
+            await receiptService.remove(path);
+        }
+
         await this.recalculateBalances();
     }
 

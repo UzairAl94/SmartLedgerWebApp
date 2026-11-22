@@ -58,6 +58,21 @@ VITE_ELEVEN_LABS_API_KEY=...   # speech-to-text
 
 > Note: data is stored locally, but voice/text entries are sent to ElevenLabs and DeepSeek for processing.
 
+## Local API (Android)
+
+Start **Settings → Local API** to run a small HTTP server on your Wi-Fi network. It lets a
+laptop or agent read the ledger, bulk-import transactions, and query summaries while the
+app stays the single source of truth. Copy the connection details (`baseUrl` + token) from
+Settings and use them as a bearer token.
+
+- Endpoint reference: [`docs/LOCAL_API.md`](./docs/LOCAL_API.md)
+- Design/plan: [`docs/plans/mobile-local-api-server.md`](./docs/plans/mobile-local-api-server.md)
+- The `smart-ledger-import` skill (`~/.agents/skills/smart-ledger-import/`) reads uploaded
+  statements, shows an approval list, then imports through the API.
+
+Keep the app open while the server is in use, and only enable LAN access on a trusted
+network — the API is protected by a token, not by TLS.
+
 ## Project layout
 
 ```

@@ -6,7 +6,7 @@ import { WebDbProvider } from './db/WebDbProvider';
 import { seedCategoriesIfNeeded } from './db/seeder';
 
 // Bump this and add a matching `if (version < N)` block when the schema changes.
-const LATEST_SCHEMA_VERSION = 1;
+const LATEST_SCHEMA_VERSION = 2;
 
 class SqliteService {
     private provider: IDbProvider | null = null;
@@ -72,7 +72,20 @@ class SqliteService {
             await this.ensureColumn(db, 'recurring_transactions', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
         }
 
-        // Future migrations: if (version < 2) { ...ensureColumn / ALTER / CREATE INDEX... }
+        if (version < 2) {
+            // v2: import provenance + idempotency keys for API bulk imports.
+            await this.ensureColumn(db, 'transactions', 'externalId', 'TEXT');
+            await this.ensureColumn(db, 'transactions', 'importBatchId', 'TEXT');
+            try {
+                await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_external_id ON transactions(externalId);');
+                await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);');
+            } catch (error) {
+                // Indexes are an optimisation; the app still works without them.
+                console.warn('SqliteService: could not create transaction indexes:', error);
+            }
+        }
+
+        // Future migrations: if (version < 3) { ...ensureColumn / ALTER / CREATE INDEX... }
 
         // 3. Persist the new version. Non-fatal if it fails — every migration
         //    above is idempotent, so it can safely re-run on the next launch.
@@ -150,6 +163,8 @@ class SqliteService {
                 fee REAL,
                 receiptPath TEXT,
                 hidden INTEGER NOT NULL DEFAULT 0,
+                externalId TEXT,
+                importBatchId TEXT,
                 FOREIGN KEY(accountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(toAccountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
