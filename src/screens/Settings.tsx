@@ -762,24 +762,22 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                     <div className="relative">
                         <input
                             type="file"
-                            accept=".zip,.json"
+                            accept="*/*"
                             onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
 
                                 if (confirm('Restore Data? This will replace all current data with the backup file. This cannot be undone.')) {
-                                    const isZip = file.name.toLowerCase().endsWith('.zip');
                                     const reader = new FileReader();
                                     reader.onload = async (event) => {
                                         try {
-                                            // ZIP → ArrayBuffer; legacy JSON → string.
-                                            await backupService.restoreBackup(event.target?.result as ArrayBuffer | string);
+                                            // Always read bytes; restore detects ZIP vs JSON from the content.
+                                            await backupService.restoreBackup(event.target?.result as ArrayBuffer);
                                         } catch (error) {
                                             alert('Restore failed: ' + (error instanceof Error ? error.message : String(error)));
                                         }
                                     };
-                                    if (isZip) reader.readAsArrayBuffer(file);
-                                    else reader.readAsText(file);
+                                    reader.readAsArrayBuffer(file);
                                 }
                                 // Reset input
                                 e.target.value = '';

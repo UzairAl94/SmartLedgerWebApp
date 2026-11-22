@@ -215,6 +215,83 @@ const maybeRunScheduledBackup = async (): Promise<void> => {
     }
 };
 
+const isValidBackupData = (data: BackupData | null | undefined): data is BackupData =>
+    !!data
+    && Array.isArray(data.accounts)
+    && Array.isArray(data.transactions)
+    && Array.isArray(data.categories);
+
+const parseBackupJson = (text: string): BackupData => {
+    let data: BackupData;
+    try {
+        data = JSON.parse(text) as BackupData;
+    } catch {
+        throw new Error('Invalid backup file: expected a Smart Ledger .zip or .json backup.');
+    }
+    if (!isValidBackupData(data)) {
+        throw new Error('Invalid backup file format.');
+    }
+    return data;
+};
+
+// ZIP files always start with "PK\x03\x04". Detect by content because Android's
+// document picker sometimes returns a ZIP without a .zip extension.
+const isZipBuffer = (buffer: ArrayBuffer): boolean => {
+    if (buffer.byteLength < 4) return false;
+    const bytes = new Uint8Array(buffer, 0, 4);
+    return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+};
+
+const decodeBuffer = (buffer: ArrayBuffer): string => new TextDecoder('utf-8').decode(buffer);
+
+const restoreLegacyJson = async (text: string): Promise<void> => {
+    const data = parseBackupJson(text);
+    await restoreData(data);
+    window.location.reload();
+};
+
+const restoreZip = async (zip: JSZip): Promise<void> => {
+    const dataFile = zip.file('data.json');
+    if (!dataFile) throw new Error('Invalid backup: data.json missing.');
+    const data = parseBackupJson(await dataFile.async('string'));
+
+    // Clear existing receipt files, then restore the ones from the archive.
+    await receiptService.clearAll();
+    for (const tx of data.transactions) {
+        if (!tx.receiptPath) continue;
+        const f = zip.file(tx.receiptPath);
+        if (f) await receiptService.writeBase64(tx.receiptPath, await f.async('base64'));
+    }
+
+    await restoreData(data);
+    window.location.reload();
+};
+
+const restoreInput = async (input: string | ArrayBuffer): Promise<void> => {
+    if (typeof input === 'string') {
+        const trimmed = input.trimStart();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            return restoreLegacyJson(input);
+        }
+        if (trimmed.startsWith('PK')) {
+            // Binary ZIP that was read as text (older callers).
+            const bytes = new Uint8Array(input.length);
+            for (let index = 0; index < input.length; index++) {
+                bytes[index] = input.charCodeAt(index) & 0xff;
+            }
+            return restoreZip(await JSZip.loadAsync(bytes));
+        }
+        throw new Error('Invalid backup file: expected a Smart Ledger .zip or .json backup.');
+    }
+
+    if (isZipBuffer(input)) {
+        return restoreZip(await JSZip.loadAsync(input));
+    }
+
+    // JSON file read as bytes (some pickers lose the extension).
+    return restoreLegacyJson(decodeBuffer(input));
+};
+
 export const backupService = {
     // Manual export via the share sheet.
     exportBackup: shareBackupZip,
@@ -228,40 +305,12 @@ export const backupService = {
     maybeRunScheduledBackup,
 
     /**
-     * Restore from a ZIP backup (ArrayBuffer) or a legacy JSON backup (string).
+     * Restore from a ZIP or legacy JSON backup. The format is detected from the
+     * content, not the file extension.
      */
     restoreBackup: async (input: string | ArrayBuffer): Promise<void> => {
         try {
-            if (typeof input === 'string') {
-                // Legacy v1 JSON backup — no receipts.
-                const data: BackupData = JSON.parse(input);
-                if (!data.accounts || !data.transactions || !data.categories) {
-                    throw new Error('Invalid backup file format.');
-                }
-                await restoreData(data);
-                window.location.reload();
-                return;
-            }
-
-            // ZIP backup.
-            const zip = await JSZip.loadAsync(input);
-            const dataFile = zip.file('data.json');
-            if (!dataFile) throw new Error('Invalid backup: data.json missing.');
-            const data: BackupData = JSON.parse(await dataFile.async('string'));
-            if (!data.accounts || !data.transactions || !data.categories) {
-                throw new Error('Invalid backup file format.');
-            }
-
-            // Clear existing receipt files, then restore the ones from the archive.
-            await receiptService.clearAll();
-            for (const tx of data.transactions) {
-                if (!tx.receiptPath) continue;
-                const f = zip.file(tx.receiptPath);
-                if (f) await receiptService.writeBase64(tx.receiptPath, await f.async('base64'));
-            }
-
-            await restoreData(data);
-            window.location.reload();
+            await restoreInput(input);
         } catch (error) {
             console.error('Restore failed:', error);
             throw error;
