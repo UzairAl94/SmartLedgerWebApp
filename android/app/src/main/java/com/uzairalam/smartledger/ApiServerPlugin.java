@@ -194,7 +194,7 @@ public class ApiServerPlugin extends Plugin {
         String uri = session.getUri();
         boolean isApiRequest = uri.equals("/api") || uri.startsWith("/api/");
         if (!isApiRequest) {
-            return serveStatic(uri);
+            return serveStatic(session);
         }
 
         if (!isAuthorized(session)) {
@@ -293,14 +293,26 @@ public class ApiServerPlugin extends Plugin {
         );
     }
 
-    private NanoHTTPD.Response serveStatic(String uri) {
+    private NanoHTTPD.Response serveStatic(NanoHTTPD.IHTTPSession session) {
+        String uri = session.getUri();
         String path = uri.equals("/") ? "index.html" : uri.substring(1);
         if (path.contains("..")) {
             return withCors(jsonError(400, "Bad path"));
         }
 
+        // Friendly routes: /desktop always opens the wide-screen client, /mobile
+        // forces the phone layout.
+        if (path.equals("desktop") || path.equals("desktop/")) path = "desktop.html";
+        if (path.equals("mobile") || path.equals("mobile/")) path = "index.html";
+
         // SPA fallback: extensionless routes render the app shell.
         if (!path.contains(".")) path = "index.html";
+
+        // A laptop browser opening the bare address gets the desktop client; the
+        // phone (and any mobile browser) keeps the touch layout.
+        if ("index.html".equals(path) && isDesktopBrowser(session)) {
+            path = "desktop.html";
+        }
 
         if ("index.html".equals(path)) {
             try (InputStream input = getContext().getAssets().open("public/index.html")) {
@@ -330,6 +342,20 @@ public class ApiServerPlugin extends Plugin {
         } catch (Exception error) {
             return withCors(jsonError(404, "Not found"));
         }
+    }
+
+    private boolean isDesktopBrowser(NanoHTTPD.IHTTPSession session) {
+        String userAgent = session.getHeaders().get("user-agent");
+        if (userAgent == null) return false;
+        String ua = userAgent.toLowerCase(java.util.Locale.US);
+        if (!ua.contains("mozilla")) return false;
+        boolean mobile = ua.contains("android")
+            || ua.contains("iphone")
+            || ua.contains("ipad")
+            || ua.contains("ipod")
+            || ua.contains("mobile")
+            || ua.contains("tablet");
+        return !mobile;
     }
 
     private String injectRemoteBootstrap(String html) {

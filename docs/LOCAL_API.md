@@ -1,7 +1,8 @@
 # Smart Ledger Local API
 
 The Android app can host a small HTTP server on your Wi-Fi network. It exposes the ledger
-for imports and analysis, and (in a future version) serves the web UI from the same server.
+for imports and analysis, and it also serves a wide-screen web client at `/desktop.html`
+for laptops. The mobile PWA remains at `/`.
 
 ## Start it
 
@@ -13,6 +14,34 @@ for imports and analysis, and (in a future version) serves the web UI from the s
 
 Keep the app open while using the API: the server forwards requests into the app's
 JavaScript layer, where the real services and SQLite live.
+
+## Desktop web client
+
+The same server hosts a desktop-first client. On your laptop just open the base address:
+
+```
+http://<phone-ip>:8765
+```
+
+The server looks at the browser's user agent: a laptop browser gets the desktop client,
+while the phone (or any mobile browser) keeps the touch layout. Explicit routes also exist:
+`/desktop` for the wide-screen client and `/mobile` for the phone layout.
+
+Tap **Copy desktop UI link** in Settings → Local API to copy the base URL. Enter the access
+token on the sign-in screen; it is remembered in that browser. The phone remains the source
+of truth — every write goes through the same services and appears in the mobile app.
+
+The desktop client adds things the phone layout has no room for: dense sortable tables with
+per-column filters, a request inspector (`/api/logs`), connection diagnostics, multi-account
+overview, and a wide chart layout. It is a separate entry point in the same build, so it goes
+stale only if you rebuild the app without running `npx cap sync android`.
+
+Notes:
+- It is served over plain HTTP; the token is the only protection.
+- Service workers (offline install) are not used here — browsers only allow them on HTTPS
+  or localhost.
+- The mobile bundle served at `/mobile` still runs in the browser's own storage, which is
+  separate from the phone's SQLite. It is not a remote view of the phone ledger.
 
 ## Authentication
 

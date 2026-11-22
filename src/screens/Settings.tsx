@@ -166,6 +166,7 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
         : `http://127.0.0.1:${apiState.port}`;
 
     const connectionJson = JSON.stringify({ baseUrl: apiBaseUrl, token: apiToken }, null, 2);
+    const desktopUrl = `${apiBaseUrl}/desktop.html`;
 
     useEffect(() => {
         const handler = (e: any) => {
@@ -719,6 +720,19 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                                 Copy connection details
                             </button>
                         </div>
+
+                        <button
+                            onClick={() => copyText(desktopUrl, 'desktop')}
+                            disabled={!apiToken}
+                            className="w-full py-2.5 bg-primary-light text-primary rounded-xl font-bold text-[13px] active:scale-95 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                        >
+                            {copied === 'desktop' ? <Check size={15} /> : <Server size={15} />}
+                            Copy desktop UI link
+                        </button>
+                        <p className="text-[11px] text-text-muted leading-relaxed">
+                            Open the copied link on your laptop: it is a wide-screen web client for the same ledger, built for
+                            desktop and served by this phone. Sign in with the access token above.
+                        </p>
 
                         {apiState.log.length > 0 && (
                             <div className="flex flex-col gap-1.5">

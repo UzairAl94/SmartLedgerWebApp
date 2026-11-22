@@ -1,0 +1,2477 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Smart Ledger · Desktop prototype</title>
+<style>
+  :root {
+    --primary: #4f46e5;
+    --primary-light: #eef2ff;
+    --income: #10b981;
+    --income-light: #ecfdf5;
+    --expense: #f43f5e;
+    --expense-light: #fff1f2;
+    --warning: #f59e0b;
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --surface-3: #e2e8f0;
+    --text: #0f172a;
+    --text-2: #64748b;
+    --muted: #94a3b8;
+    --border: #e2e8f0;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 12px 32px -18px rgba(15, 23, 42, .35);
+    --radius: 16px;
+    --sidebar: 248px;
+  }
+  [data-theme="dark"] {
+    --primary: #6366f1;
+    --primary-light: #312e81;
+    --income-light: #064e3b;
+    --expense-light: #4c1d24;
+    --bg: #0b1220;
+    --surface: #111a2e;
+    --surface-2: #17203a;
+    --surface-3: #1f2a48;
+    --text: #f1f5f9;
+    --text-2: #cbd5e1;
+    --muted: #94a3b8;
+    --border: #243049;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 40px -24px rgba(0, 0, 0, .8);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 400 14px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { font-weight: 600; letter-spacing: -.01em; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; background: none; border: 0; }
+  a { color: var(--primary); text-decoration: none; }
+  ::selection { background: color-mix(in srgb, var(--primary) 25%, transparent); }
+
+  .app { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); height: 100vh; overflow: hidden; }
+
+  .sidebar {
+    display: flex; flex-direction: column; gap: 18px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 20px 14px; overflow-y: auto;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 10px; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
+    background: linear-gradient(145deg, var(--primary), #8b5cf6); color: white; font-weight: 700;
+    box-shadow: 0 6px 16px -8px var(--primary);
+  }
+  .brand-name { font-weight: 650; font-size: 15px; line-height: 1.15; }
+  .brand-sub { font-size: 11px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .nav-group { display: flex; flex-direction: column; gap: 2px; }
+  .nav-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); padding: 8px 10px 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px;
+    color: var(--text-2); font-weight: 500; transition: background .15s, color .15s; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--surface-2); color: var(--text); }
+  .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+  [data-theme="dark"] .nav-item.active { color: #e0e7ff; }
+  .nav-item .icon { width: 17px; height: 17px; flex-shrink: 0; }
+  .nav-badge { margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
+  .sidebar-foot { margin-top: auto; border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .conn-card { border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 12px; }
+  .conn-row { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.live { background: var(--income); box-shadow: 0 0 0 3px color-mix(in srgb, var(--income) 20%, transparent); }
+  .dot.demo { background: var(--warning); }
+  .conn-meta { color: var(--muted); margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; word-break: break-all; }
+  .conn-btn { margin-top: 8px; width: 100%; }
+
+  .main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .topbar {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 18px;
+    padding: 18px 28px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .tb-title h1 { font-size: 20px; }
+  .tb-title p { color: var(--text-2); font-size: 12.5px; margin-top: 2px; }
+  .tb-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .view { flex: 1; overflow-y: auto; padding: 22px 28px 40px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; border-radius: 10px; padding: 8px 13px;
+    font-weight: 600; font-size: 13px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.07); background: var(--primary); }
+  .btn.ghost { border-color: transparent; color: var(--text-2); }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--text); }
+  .btn.danger { color: var(--expense); border-color: color-mix(in srgb, var(--expense) 35%, var(--border)); }
+  .btn.danger:hover { background: var(--expense-light); }
+  .btn.sm { padding: 5px 9px; font-size: 12px; border-radius: 8px; }
+  .icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; border: 1px solid var(--border); color: var(--text-2); background: var(--surface); }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  select, input[type="text"], input[type="number"], input[type="date"], input[type="password"], input[type="time"] {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px;
+    outline: none; font-size: 13px; min-width: 0;
+  }
+  select:hover, input:hover { border-color: var(--surface-3); }
+  input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent); }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11.5px; font-weight: 600; color: var(--text-2); letter-spacing: .02em; }
+  .field .hint { font-size: 11px; color: var(--muted); }
+  .row { display: flex; gap: 10px; }
+  .grow { flex: 1; }
+  .switch { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+  .switch input { width: 16px; height: 16px; accent-color: var(--primary); }
+
+  .grid { display: grid; gap: 16px; }
+  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .two-col { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+  .cards-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cards-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card-pad { padding: 18px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 10px; }
+  .card-head h3 { font-size: 14px; }
+  .card-head p { font-size: 12px; color: var(--muted); }
+  .kpi { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; position: relative; overflow: hidden; }
+  .kpi .k-label { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+  .kpi .k-value { font-size: 23px; font-weight: 650; letter-spacing: -.02em; }
+  .kpi .k-sub { font-size: 11.5px; color: var(--muted); }
+  .kpi .k-icon { position: absolute; right: 14px; top: 14px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--surface-2); color: var(--text-2); }
+  .pos { color: var(--income); }
+  .neg { color: var(--expense); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .table-wrap { overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
+    font-weight: 650; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface); white-space: nowrap;
+  }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+  .t-right { text-align: right; }
+  .t-num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .t-note { color: var(--text-2); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-muted { color: var(--muted); }
+  .t-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 650; }
+  .badge.Income { background: var(--income-light); color: var(--income); }
+  .badge.Expense { background: var(--expense-light); color: var(--expense); }
+  .badge.Transfer { background: var(--primary-light); color: var(--primary); }
+  [data-theme="dark"] .badge.Income { color: #6ee7b7; }
+  [data-theme="dark"] .badge.Expense { color: #fda4af; }
+  [data-theme="dark"] .badge.Transfer { color: #e0e7ff; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); font-size: 11.5px; font-weight: 600; }
+  .chip.live { background: var(--income-light); color: var(--income); }
+  .chip.demo { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+
+  .toolbar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .toolbar .field { min-width: 120px; }
+  .search { position: relative; }
+  .search input { width: 240px; padding-left: 31px; }
+  .search .icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+
+  .pager { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; font-size: 12px; color: var(--text-2); }
+
+  .progress { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+  .progress > span { display: block; height: 100%; border-radius: 999px; background: var(--primary); }
+
+  .list-empty { padding: 46px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+  .list-empty .icon { width: 30px; height: 30px; margin: 0 auto 8px; color: var(--surface-3); }
+
+  .banner { display: flex; align-items: center; gap: 10px; padding: 11px 15px; border-radius: 12px; margin-bottom: 16px; font-size: 12.5px; border: 1px solid color-mix(in srgb, var(--expense) 30%, var(--border)); background: var(--expense-light); color: var(--expense); }
+  [data-theme="dark"] .banner { color: #fda4af; }
+  .banner .grow { color: inherit; }
+
+  .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s infinite linear; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .loading-bar { position: sticky; top: 0; height: 2px; background: var(--primary); animation: pulse 1.1s infinite ease-in-out; z-index: 5; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+  .chart { width: 100%; display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 4px 18px 16px; font-size: 12px; color: var(--text-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; }
+  .donut-wrap { display: flex; align-items: center; gap: 18px; padding: 8px 18px 18px; }
+  .donut { width: 168px; flex-shrink: 0; }
+  .donut-center { text-align: center; font-size: 11px; color: var(--muted); }
+  .donut-center b { display: block; font-size: 17px; color: var(--text); letter-spacing: -.02em; }
+
+  .acct-mini { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+  .acct-dot { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 14px; flex-shrink: 0; background: var(--surface-2); }
+  .acct-mini b { font-size: 12.5px; display: block; }
+  .acct-mini small { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .acct-mini .amt { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+  .modal-root { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+  .modal-backdrop { position: absolute; inset: 0; background: rgba(8, 12, 24, .5); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 24px; pointer-events: auto; overflow: auto; }
+  .modal {
+    width: min(520px, 100%); background: var(--surface); border-radius: 20px; border: 1px solid var(--border);
+    box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .5); padding: 22px; max-height: calc(100vh - 48px); overflow: auto;
+    animation: pop .16s ease-out;
+  }
+  .modal.wide { width: min(660px, 100%); }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+  .modal-head h2 { font-size: 16.5px; }
+  .modal-head p { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+  .modal-body { display: grid; gap: 13px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .modal-foot .spacer { flex: 1; }
+
+  .toast-root { position: fixed; right: 22px; bottom: 22px; z-index: 80; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast {
+    background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary);
+    border-radius: 11px; padding: 10px 14px; font-size: 12.5px; box-shadow: var(--shadow); min-width: 240px;
+    animation: slide .2s ease-out; pointer-events: auto;
+  }
+  .toast.ok { border-left-color: var(--income); }
+  .toast.error { border-left-color: var(--expense); }
+  @keyframes slide { from { opacity: 0; transform: translateX(12px); } }
+
+  .gate { position: fixed; inset: 0; z-index: 70; background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(6px); display: grid; place-items: center; padding: 24px; }
+  .gate-card { width: min(460px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 26px; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, .55); }
+  .gate-card h2 { font-size: 19px; }
+  .gate-card p { color: var(--text-2); font-size: 13px; margin-top: 6px; }
+  .gate-form { display: grid; gap: 12px; margin-top: 18px; }
+  .gate-note { font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+  .gate-alt { margin-top: 14px; display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 12.5px; color: var(--text-2); }
+
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650; margin-bottom: 3px; }
+  .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .rate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .kv { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .kv:last-child { border-bottom: 0; }
+  .kv span { color: var(--muted); }
+  .kv b { font-weight: 600; text-align: right; }
+  .endpoint { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--text-2); padding: 4px 0; }
+  .req-row td { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .status-2xx { color: var(--income); font-weight: 650; }
+  .status-err { color: var(--expense); font-weight: 650; }
+
+  .budget-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 16px; align-items: center; padding: 13px 18px; border-bottom: 1px solid var(--border); }
+  .budget-row:last-child { border-bottom: 0; }
+  .budget-name { display: flex; align-items: center; gap: 9px; font-weight: 550; }
+  .budget-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .budget-right { text-align: right; }
+  .budget-right b { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .budget-right small { font-size: 11px; color: var(--muted); }
+
+  .subnav { display: flex; gap: 4px; padding: 0 0 14px; }
+  .subnav button { padding: 6px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface-2); }
+  .subnav button.active { background: var(--primary); color: #fff; }
+
+  @media (max-width: 1180px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .two-col { grid-template-columns: minmax(0, 1fr); }
+    .cards-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cards-3 { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 900px) {
+    :root { --sidebar: 68px; }
+    .brand-text, .nav-label, .nav-badge, .conn-card, .sidebar-foot .conn-btn { display: none; }
+    .nav-item { justify-content: center; }
+    .settings-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M3 7.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7.5"/><path d="M3 7.5h18M16 3.5V7.5H8V3.5h8z"/><circle cx="16.5" cy="13.5" r="1.2"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 9a8 8 0 0 1 14-2l2 2M20 15a8 8 0 0 1-14 2l-2-2"/><path d="M18 4v5M18 9l3-2M6 20v-5M6 15l-3 2"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v11M12 14l-3.5-3.5M12 14l3.5-3.5"/><path d="M4 16.5v2A2 2 0 0 0 6 20.5h12a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8zM12 17v4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4M20 8l-3.5-.6"/><path d="M4 12a8 8 0 0 1 2.3-5.6M4 4v4M4 8l3.5-.6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5 8.5 8.5 0 0 0 20.5 14.5z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16v4zM13 7l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L20 7"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 20V5M6.5 10.5L12 5l5.5 5.5"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 4v15M6.5 13.5L12 19l5.5-5.5"/></symbol>
+  <symbol id="i-wallet2" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 11h18M16 3.5V6H8V3.5h8z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.5 13.5l3-3M7 17a4 4 0 0 1 0-5.6l2-2M17 7a4 4 0 0 1 0 5.6l-2 2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+</svg>
+
+<div id="app-root"></div>
+<div id="modal-root" class="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const DEFAULT_RATES = { PKR: 1, USD: 278.5, AED: 75.7, MYR: 59.2 };
+  const CURRENCIES = ["PKR", "USD", "AED", "MYR"];
+  const STORAGE_KEY = "smartledger.web.prototype.v1";
+  const RANGE_OPTIONS = [
+    ["this-month", "This month"],
+    ["last-month", "Last month"],
+    ["3m", "Last 3 months"],
+    ["6m", "Last 6 months"],
+    ["ytd", "Year to date"],
+    ["all", "All time"],
+  ];
+  const PAGE_META = {
+    dashboard: ["Overview", "Your money at a glance"],
+    transactions: ["Transactions", "Every entry in the ledger"],
+    accounts: ["Accounts", "Where the money sits"],
+    budgets: ["Budgets", "Monthly limits per category"],
+    recurring: ["Recurring", "Rules that create entries automatically"],
+    imports: ["Imports", "Batches written through the API"],
+    api: ["API & Sync", "The phone server this UI talks to"],
+    settings: ["Settings", "Preferences shared with the mobile app"],
+  };
+
+  const state = {
+    mode: "demo",
+    baseUrl: "",
+    token: "",
+    theme: "light",
+    page: "dashboard",
+    range: "6m",
+    accounts: [],
+    categories: [],
+    settings: null,
+    budgets: [],
+    recurring: [],
+    imports: [],
+    dashboard: null,
+    tx: { rows: [], total: 0, offset: 0, limit: 25 },
+    filters: { q: "", type: "", accountId: "", categoryId: "", from: "", to: "", order: "desc" },
+    api: { health: null, logs: [], latency: null },
+    loading: false,
+    loaded: {},
+    error: null,
+    gateOpen: false,
+    modal: null,
+  };
+
+  const $ = id => document.getElementById(id);
+  const val = id => ($(id) && $(id).value !== undefined ? $(id).value.trim() : "");
+  const icon = (name, cls = "icon") => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  const round2 = n => Math.round(n * 100) / 100;
+  const isoDay = d => {
+    const copy = new Date(d);
+    return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, "0")}-${String(copy.getDate()).padStart(2, "0")}`;
+  };
+
+  class HttpError extends Error {
+    constructor(status, message, details) {
+      super(message);
+      this.status = status;
+      this.details = details;
+    }
+  }
+
+  const rates = () => {
+    const custom = state.settings && state.settings.useCustomRates ? state.settings.customRates : null;
+    return { ...DEFAULT_RATES, ...(custom || {}) };
+  };
+  const conv = (amount, from, to) => {
+    if (!from || !to || from === to) return amount;
+    const table = rates();
+    const source = table[from] || 1;
+    const target = table[to] || 1;
+    return (amount * source) / target;
+  };
+  const fmtMoney = (amount, currency) => {
+    const code = CURRENCIES.includes(currency) ? currency : "PKR";
+    const value = Number(amount) || 0;
+    if (code === "PKR") return `Rs ${Math.round(value).toLocaleString("en-US")}`;
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(value);
+  };
+  const fmtCompact = amount => {
+    const n = Math.abs(amount);
+    if (n >= 100000) return `${(amount / 100000).toFixed(1)}L`;
+    if (n >= 1000) return `${(amount / 1000).toFixed(0)}k`;
+    return String(Math.round(amount));
+  };
+  const fmtDate = iso => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  };
+  const fmtDateTime = iso => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} · ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  };
+  const mainCurrency = () => (state.settings && state.settings.mainCurrency) || "PKR";
+  const accountById = id => state.accounts.find(a => a.id === id);
+  const categoryById = id => state.categories.find(c => c.id === id);
+  const accountName = id => (accountById(id) && accountById(id).name) || "Unknown account";
+  const categoryName = id => (categoryById(id) && categoryById(id).name) || "Uncategorized";
+
+  function rangeBounds(range) {
+    const now = new Date();
+    const to = isoDay(now);
+    const startOfMonth = d => new Date(d.getFullYear(), d.getMonth(), 1);
+    if (range === "all") return {};
+    if (range === "this-month") return { from: isoDay(startOfMonth(now)), to };
+    if (range === "last-month") {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: isoDay(first), to: isoDay(last) };
+    }
+    if (range === "3m") return { from: isoDay(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to };
+    if (range === "6m") return { from: isoDay(new Date(now.getFullYear(), now.getMonth() - 5, 1)), to };
+    if (range === "ytd") return { from: `${now.getFullYear()}-01-01`, to };
+    return {};
+  }
+
+  function toast(message, kind = "") {
+    const root = $("toast-root");
+    if (!root) return;
+    const node = document.createElement("div");
+    node.className = `toast ${kind}`;
+    node.textContent = message;
+    root.appendChild(node);
+    setTimeout(() => node.remove(), 3800);
+  }
+
+  function saveConnection() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode: state.mode, baseUrl: state.baseUrl, token: state.token, theme: state.theme }));
+    } catch (error) {
+      /* storage unavailable */
+    }
+  }
+
+  function loadConnection() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      if (saved.theme) state.theme = saved.theme;
+      if (saved.mode === "live" && saved.baseUrl && saved.token) {
+        state.mode = "live";
+        state.baseUrl = saved.baseUrl;
+        state.token = saved.token;
+        return true;
+      }
+      if (saved.mode === "demo") {
+        state.mode = "demo";
+        return true;
+      }
+    } catch (error) {
+      /* ignore malformed storage */
+    }
+    return false;
+  }
+
+  function query(params) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null && value !== "") search.set(key, value);
+    }
+    const qs = search.toString();
+    return qs ? `?${qs}` : "";
+  }
+
+  async function api(path, options = {}) {
+    const method = (options.method || "GET").toUpperCase();
+    if (state.mode === "demo") return demoRequest(method, path, options.body);
+
+    const base = state.baseUrl.replace(/\/+$/, "");
+    const response = await fetch(base + path, {
+      method,
+      headers: { Authorization: `Bearer ${state.token}`, "Content-Type": "application/json" },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    const text = await response.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (error) {
+      data = { raw: text };
+    }
+    if (!response.ok) {
+      const message = (data && data.error && data.error.message) || `HTTP ${response.status}`;
+      throw new HttpError(response.status, message, data);
+    }
+    return data;
+  }
+
+  const demo = createDemoStore();
+
+  function createDemoStore() {
+    let seed = 20261122;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const between = (min, max) => Math.round(min + rnd() * (max - min));
+    const uid = prefix => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+    const pick = list => list[Math.floor(rnd() * list.length)];
+
+    const accounts = [
+      { id: "a-cash", name: "Cash", type: "Cash", currency: "PKR", initialBalance: 95000, balance: 0, color: "#10b981", icon: "wallet" },
+      { id: "a-hbl", name: "HBL Bank", type: "Bank", currency: "PKR", initialBalance: 210000, balance: 0, color: "#4f46e5", icon: "landmark" },
+      { id: "a-aed", name: "Dubai Wallet", type: "Cash", currency: "AED", initialBalance: 1500, balance: 0, color: "#f59e0b", icon: "globe" },
+      { id: "a-usd", name: "USD Savings", type: "Bank", currency: "USD", initialBalance: 3200, balance: 0, color: "#0ea5e9", icon: "piggy" },
+    ];
+
+    const categories = [
+      { id: "c-salary", name: "Salary", type: "Income", icon: "💼", color: "#10b981" },
+      { id: "c-freelance", name: "Freelance", type: "Income", icon: "💻", color: "#22c55e" },
+      { id: "c-gifts", name: "Gifts", type: "Income", icon: "🎁", color: "#84cc16" },
+      { id: "c-groceries", name: "Groceries", type: "Expense", icon: "🛒", color: "#f43f5e" },
+      { id: "c-dining", name: "Dining Out", type: "Expense", icon: "🍽️", color: "#fb7185" },
+      { id: "c-transport", name: "Transport", type: "Expense", icon: "🚗", color: "#f59e0b" },
+      { id: "c-utilities", name: "Utilities", type: "Expense", icon: "💡", color: "#eab308" },
+      { id: "c-rent", name: "Rent", type: "Expense", icon: "🏠", color: "#8b5cf6" },
+      { id: "c-shopping", name: "Shopping", type: "Expense", icon: "🛍️", color: "#ec4899" },
+      { id: "c-health", name: "Health", type: "Expense", icon: "🩺", color: "#14b8a6" },
+      { id: "c-subs", name: "Subscriptions", type: "Expense", icon: "📺", color: "#6366f1" },
+    ];
+
+    const settings = {
+      mainCurrency: "PKR",
+      monthStartDay: 1,
+      useCustomRates: false,
+      customRates: { USD: 278.5, AED: 75.7, MYR: 59.2 },
+      theme: "light",
+      notificationsEnabled: true,
+      autoBackupEnabled: true,
+      backupFrequency: "weekly",
+      backupTime: "21:00",
+      lastBackupAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+      hasPin: true,
+      apiServerPort: 8765,
+      apiServerAllowLan: true,
+    };
+
+    const transactions = [];
+    const push = (tx) => transactions.push({ hidden: 0, fee: undefined, note: "", ...tx });
+
+    const now = new Date();
+    for (let back = 5; back >= 0; back--) {
+      const first = new Date(now.getFullYear(), now.getMonth() - back, 1);
+      const year = first.getFullYear();
+      const month = first.getMonth();
+      const maxDay = back === 0 ? now.getDate() : 28;
+      const at = day => isoDay(new Date(year, month, Math.min(day, maxDay)));
+      const add = (day, type, amount, currency, accountId, categoryId, note, toAccountId) => {
+        if (day > maxDay) return;
+        push({
+          id: uid("t"),
+          amount,
+          currency,
+          accountId,
+          categoryId,
+          toAccountId,
+          date: `${at(day)}T12:00:00.000Z`,
+          type,
+          note,
+        });
+      };
+
+      add(1, "Income", between(182000, 205000), "PKR", "a-hbl", "c-salary", "Monthly salary");
+      if (rnd() > 0.25) add(between(5, 20), "Income", between(22000, 92000), "PKR", "a-hbl", "c-freelance", pick(["Dashboard revamp", "Brand identity", "Retainer", "Landing page"]));
+      add(3, "Expense", 48000, "PKR", "a-hbl", "c-rent", "Apartment rent");
+      add(10, "Expense", between(7200, 18600), "PKR", "a-hbl", "c-utilities", pick(["K-Electric", "Sui Gas", "Internet + water"]));
+      add(12, "Expense", 1450, "PKR", "a-hbl", "c-subs", "Netflix + Spotify");
+      for (let i = 0; i < between(3, 5); i++) add(between(2, 27), "Expense", between(1900, 9600), "PKR", "a-cash", "c-groceries", pick(["Weekly shop", "Imtiaz", "Al-Fatah", "Sabzi mandi"]));
+      for (let i = 0; i < between(2, 4); i++) add(between(2, 27), "Expense", between(750, 6800), "PKR", "a-cash", "c-dining", pick(["Biryani night", "Coffee", "Lunch with team", "KFC"]));
+      for (let i = 0; i < between(2, 4); i++) add(between(2, 27), "Expense", between(260, 2700), "PKR", "a-cash", "c-transport", pick(["Careem", "Fuel", "Toll + parking"]));
+      if (rnd() > 0.35) add(between(4, 26), "Expense", between(1600, 23000), "PKR", "a-hbl", "c-shopping", pick(["Daraz order", "Shoes", "Home stuff"]));
+      if (rnd() > 0.55) add(between(4, 26), "Expense", between(1200, 9500), "PKR", "a-cash", "c-health", pick(["Pharmacy", "Dentist", "Lab test"]));
+      add(24, "Expense", 165, "AED", "a-aed", "c-dining", "Dubai dinner");
+      add(21, "Expense", 14.99, "USD", "a-usd", "c-subs", "iCloud storage");
+      add(25, "Transfer", 15000, "PKR", "a-hbl", undefined, "Transfer to cash", "a-cash");
+    }
+
+    const importedStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    for (let i = 0; i < 8; i++) {
+      const day = new Date(importedStart.getFullYear(), importedStart.getMonth(), 3 + i);
+      push({
+        id: uid("t"),
+        amount: between(1400, 5200),
+        currency: "PKR",
+        accountId: "a-cash",
+        categoryId: "c-groceries",
+        date: `${isoDay(day)}T12:00:00.000Z`,
+        type: "Expense",
+        note: "Imported statement row",
+        importBatchId: "statement_2026-09_a1b2c3",
+      });
+    }
+
+    transactions.sort((a, b) => b.date.localeCompare(a.date));
+
+    const budgets = [
+      { id: uid("b"), categoryId: "c-groceries", amount: 60000, currency: "PKR", period: "monthly" },
+      { id: uid("b"), categoryId: "c-dining", amount: 25000, currency: "PKR", period: "monthly" },
+      { id: uid("b"), categoryId: "c-transport", amount: 12000, currency: "PKR", period: "monthly" },
+      { id: uid("b"), categoryId: "c-shopping", amount: 30000, currency: "PKR", period: "monthly" },
+      { id: uid("b"), categoryId: "c-utilities", amount: 22000, currency: "PKR", period: "monthly" },
+    ];
+
+    const nextRun = (days) => new Date(Date.now() + days * 86400000).toISOString();
+    const recurring = [
+      { id: uid("r"), amount: 48000, currency: "PKR", categoryId: "c-rent", accountId: "a-hbl", type: "Expense", frequency: "monthly", nextRunDate: nextRun(9), active: 1, note: "Apartment rent" },
+      { id: uid("r"), amount: 1450, currency: "PKR", categoryId: "c-subs", accountId: "a-hbl", type: "Expense", frequency: "monthly", nextRunDate: nextRun(4), active: 1, note: "Netflix + Spotify" },
+      { id: uid("r"), amount: 4500, currency: "PKR", categoryId: "c-utilities", accountId: "a-hbl", type: "Expense", frequency: "monthly", nextRunDate: nextRun(12), active: 1, note: "Internet" },
+      { id: uid("r"), amount: 4000, currency: "PKR", categoryId: "c-health", accountId: "a-cash", type: "Expense", frequency: "weekly", nextRunDate: nextRun(2), active: 0, note: "Gym membership" },
+    ];
+
+    const logs = [];
+
+    function recalc() {
+      for (const account of accounts) {
+        let balance = account.initialBalance;
+        for (const tx of transactions) {
+          if (tx.type === "Income" && tx.accountId === account.id) balance += conv(tx.amount, tx.currency, account.currency);
+          if (tx.type === "Expense" && tx.accountId === account.id) balance -= conv(tx.amount, tx.currency, account.currency);
+          if (tx.type === "Transfer") {
+            if (tx.accountId === account.id) balance -= conv(tx.amount, tx.currency, account.currency) + conv(tx.fee || 0, tx.currency, account.currency);
+            if (tx.toAccountId === account.id) balance += conv(tx.amount, tx.currency, account.currency);
+          }
+        }
+        account.balance = round2(balance);
+      }
+    }
+    recalc();
+
+    const view = tx => ({
+      ...tx,
+      accountName: accountName(tx.accountId),
+      categoryName: tx.categoryId ? categoryName(tx.categoryId) : null,
+      toAccountName: tx.toAccountId ? accountName(tx.toAccountId) : null,
+    });
+
+    function findAccount(ref) {
+      if (!ref) return null;
+      return accounts.find(a => a.id === ref) || accounts.find(a => a.name.toLowerCase() === String(ref).toLowerCase()) || null;
+    }
+    function findCategory(ref) {
+      if (!ref) return null;
+      return categories.find(c => c.id === ref) || categories.find(c => c.name.toLowerCase() === String(ref).toLowerCase()) || null;
+    }
+
+    function normalizeTransaction(body, requireDate) {
+      const typeMap = { income: "Income", expense: "Expense", transfer: "Transfer" };
+      const type = typeMap[String(body.type || "").toLowerCase()];
+      if (!type) throw new HttpError(400, "type must be income, expense, or transfer.");
+      const amount = Number(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, "amount must be a positive number.");
+      const account = findAccount(body.accountId || body.account);
+      if (!account) throw new HttpError(400, "Account not found.");
+      let date = body.date;
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) date = `${date}T12:00:00.000Z`;
+      if (!date && requireDate) throw new HttpError(400, "date is required.");
+      date = date || new Date().toISOString();
+      let categoryId;
+      let toAccountId;
+      if (type !== "Transfer") {
+        const category = findCategory(body.categoryId || body.category);
+        if (!category) throw new HttpError(400, "Category not found.");
+        if (category.type !== type) throw new HttpError(400, `Category "${category.name}" is a ${category.type} category, not ${type}.`);
+        categoryId = category.id;
+      } else {
+        const toAccount = findAccount(body.toAccountId || body.toAccount);
+        if (!toAccount) throw new HttpError(400, "Destination account not found.");
+        if (toAccount.id === account.id) throw new HttpError(400, "Source and destination accounts must be different.");
+        toAccountId = toAccount.id;
+      }
+      const fee = Number(body.fee);
+      const currency = CURRENCIES.includes(String(body.currency || "").toUpperCase()) ? String(body.currency).toUpperCase() : account.currency;
+      return {
+        amount,
+        currency,
+        accountId: account.id,
+        categoryId,
+        toAccountId,
+        date,
+        type,
+        note: body.note ? String(body.note) : undefined,
+        fee: Number.isFinite(fee) && fee > 0 ? fee : undefined,
+        hidden: body.hidden ? 1 : 0,
+        externalId: body.externalId ? String(body.externalId) : undefined,
+        receiptPath: body.receiptPath ? String(body.receiptPath) : undefined,
+      };
+    }
+
+    function summarize(params) {
+      const from = params.from;
+      const to = params.to;
+      const fromMs = from ? Date.parse(`${from}T00:00:00.000`) : null;
+      const toMs = to ? Date.parse(`${to}T23:59:59.999`) : null;
+      const target = params.currency || settings.mainCurrency;
+      const byCategory = new Map();
+      const byAccount = new Map();
+      const byPeriod = new Map();
+      let income = 0;
+      let expense = 0;
+      let fees = 0;
+      let count = 0;
+
+      for (const tx of transactions) {
+        const ms = Date.parse(tx.date);
+        if (Number.isNaN(ms)) continue;
+        if (fromMs !== null && ms < fromMs) continue;
+        if (toMs !== null && ms > toMs) continue;
+        count++;
+        const amount = conv(tx.amount, tx.currency, target);
+        fees += tx.fee ? conv(tx.fee, tx.currency, target) : 0;
+        if (tx.type !== "Income" && tx.type !== "Expense") continue;
+        const isIncome = tx.type === "Income";
+        if (isIncome) income += amount;
+        else expense += amount;
+        const key = tx.categoryId || "__none__";
+        const hit = byCategory.get(key);
+        if (hit) {
+          hit.total += amount;
+          hit.count++;
+        } else {
+          byCategory.set(key, { name: tx.categoryId ? categoryName(tx.categoryId) : "Uncategorized", type: tx.type, total: amount, count: 1 });
+        }
+        const acct = byAccount.get(tx.accountId);
+        if (acct) {
+          if (isIncome) acct.income += amount;
+          else acct.expense += amount;
+        } else {
+          byAccount.set(tx.accountId, { income: isIncome ? amount : 0, expense: isIncome ? 0 : amount });
+        }
+        const period = tx.date.slice(0, 7);
+        const bucket = byPeriod.get(period);
+        if (bucket) {
+          if (isIncome) bucket.income += amount;
+          else bucket.expense += amount;
+        } else {
+          byPeriod.set(period, { income: isIncome ? amount : 0, expense: isIncome ? 0 : amount });
+        }
+      }
+
+      return {
+        range: { from: from || null, to: to || null },
+        currency: target,
+        totals: { income: round2(income), expense: round2(expense), net: round2(income - expense), fees: round2(fees), count },
+        byCategory: Array.from(byCategory.entries())
+          .map(([categoryId, value]) => ({ categoryId: categoryId === "__none__" ? null : categoryId, name: value.name, type: value.type, total: round2(value.total), count: value.count }))
+          .sort((a, b) => b.total - a.total),
+        byAccount: Array.from(byAccount.entries())
+          .map(([accountId, value]) => ({ accountId, name: accountName(accountId), income: round2(value.income), expense: round2(value.expense), net: round2(value.income - value.expense) }))
+          .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
+        byPeriod: Array.from(byPeriod.entries())
+          .map(([period, value]) => ({ period, income: round2(value.income), expense: round2(value.expense), net: round2(value.income - value.expense) }))
+          .sort((a, b) => a.period.localeCompare(b.period)),
+      };
+    }
+
+    function computeBalances(currency) {
+      const target = currency || settings.mainCurrency;
+      const rows = accounts.map(account => ({
+        id: account.id,
+        name: account.name,
+        currency: account.currency,
+        balance: account.balance,
+        balanceConverted: round2(conv(account.balance, account.currency, target)),
+      }));
+      return { currency: target, netWorth: round2(rows.reduce((sum, row) => sum + row.balanceConverted, 0)), accounts: rows };
+    }
+
+    function countRows() {
+      return { accounts: accounts.length, transactions: transactions.length, categories: categories.length, budgets: budgets.length, recurring: recurring.length };
+    }
+
+    function imports() {
+      const groups = new Map();
+      for (const tx of transactions) {
+        if (!tx.importBatchId) continue;
+        const hit = groups.get(tx.importBatchId);
+        if (hit) {
+          hit.count++;
+          if (tx.date < hit.firstDate) hit.firstDate = tx.date;
+          if (tx.date > hit.lastDate) hit.lastDate = tx.date;
+        } else {
+          groups.set(tx.importBatchId, { batchId: tx.importBatchId, count: 1, firstDate: tx.date, lastDate: tx.date });
+        }
+      }
+      return { imports: Array.from(groups.values()).sort((a, b) => b.lastDate.localeCompare(a.lastDate)) };
+    }
+
+    function router(method, rawPath, body) {
+      const [pathname, search] = rawPath.split("?");
+      const params = new URLSearchParams(search || "");
+      const parts = pathname.split("/").filter(Boolean);
+      const resource = parts[1] || "";
+      const id = parts[2] ? decodeURIComponent(parts[2]) : null;
+
+      if (resource === "health") {
+        return { status: "ok", time: new Date().toISOString(), mainCurrency: settings.mainCurrency, server: { running: true, port: settings.apiServerPort, host: "demo", addresses: ["127.0.0.1"], allowLan: true, requestCount: logs.length }, counts: countRows() };
+      }
+      if (resource === "version") {
+        return { rev: String(transactions.length), counts: countRows(), latestTransactionDate: transactions[0] ? transactions[0].date : null };
+      }
+      if (resource === "logs") return { logs: logs.slice(0, 50) };
+      if (!resource) return { name: "Smart Ledger local API", version: 1, auth: "Authorization: Bearer <token>", endpoints: [] };
+
+      if (resource === "accounts") {
+        if (!id && method === "GET") return { accounts };
+        if (!id && method === "POST") {
+          const name = String(body.name || "").trim();
+          if (!name) throw new HttpError(400, "name is required.");
+          if (accounts.some(a => a.name.toLowerCase() === name.toLowerCase())) throw new HttpError(409, `An account named "${name}" already exists.`);
+          const typeMap = { bank: "Bank", cash: "Cash", investment: "Investment" };
+          const account = {
+            id: uid("a"),
+            name,
+            type: typeMap[String(body.type || "bank").toLowerCase()] || "Bank",
+            currency: CURRENCIES.includes(String(body.currency || "").toUpperCase()) ? String(body.currency).toUpperCase() : settings.mainCurrency,
+            initialBalance: Number(body.initialBalance) || 0,
+            balance: Number(body.initialBalance) || 0,
+            color: body.color || "#4f46e5",
+            icon: body.icon || "wallet",
+          };
+          accounts.push(account);
+          return { account };
+        }
+        if (id && method === "PATCH") {
+          const account = accounts.find(a => a.id === id);
+          if (!account) throw new HttpError(404, "Account not found.");
+          if (body.name !== undefined) {
+            const name = String(body.name).trim();
+            if (!name) throw new HttpError(400, "name must be a non-empty string.");
+            if (accounts.some(a => a.id !== id && a.name.toLowerCase() === name.toLowerCase())) throw new HttpError(409, `An account named "${name}" already exists.`);
+            account.name = name;
+          }
+          if (body.type !== undefined) {
+            const typeMap = { bank: "Bank", cash: "Cash", investment: "Investment" };
+            account.type = typeMap[String(body.type).toLowerCase()] || account.type;
+          }
+          if (body.color !== undefined) account.color = body.color;
+          if (body.icon !== undefined) account.icon = body.icon;
+          if (body.initialBalance !== undefined) {
+            const hasRows = transactions.some(t => t.accountId === id || t.toAccountId === id);
+            if (hasRows) throw new HttpError(409, "Cannot change currency or initial balance for an account that has transactions.");
+            account.initialBalance = Number(body.initialBalance) || 0;
+            recalc();
+          }
+          return { account };
+        }
+        if (id && method === "DELETE") {
+          const index = accounts.findIndex(a => a.id === id);
+          if (index < 0) throw new HttpError(404, "Account not found.");
+          accounts.splice(index, 1);
+          for (let i = transactions.length - 1; i >= 0; i--) {
+            if (transactions[i].accountId === id || transactions[i].toAccountId === id) transactions.splice(i, 1);
+          }
+          recalc();
+          return { deleted: true, id };
+        }
+      }
+
+      if (resource === "categories") {
+        if (!id && method === "GET") return { categories };
+        if (!id && method === "POST") {
+          const name = String(body.name || "").trim();
+          if (!name) throw new HttpError(400, "name is required.");
+          const type = String(body.type || "").toLowerCase() === "income" ? "Income" : "Expense";
+          if (categories.some(c => c.type === type && c.name.toLowerCase() === name.toLowerCase())) throw new HttpError(409, "Category already exists.");
+          const category = { id: uid("c"), name, type, icon: body.icon || "🏷️", color: body.color || "#4f46e5", hidden: body.hidden ? 1 : 0 };
+          categories.push(category);
+          return { category };
+        }
+        if (id && method === "DELETE") {
+          const index = categories.findIndex(c => c.id === id);
+          if (index < 0) throw new HttpError(404, "Category not found.");
+          categories.splice(index, 1);
+          for (const tx of transactions) if (tx.categoryId === id) tx.categoryId = undefined;
+          for (let i = budgets.length - 1; i >= 0; i--) if (budgets[i].categoryId === id) budgets.splice(i, 1);
+          return { deleted: true, id };
+        }
+      }
+
+      if (resource === "transactions") {
+        if (!id && method === "GET") {
+          const from = params.get("from");
+          const to = params.get("to");
+          const typeRaw = params.get("type");
+          const typeMap = { income: "Income", expense: "Expense", transfer: "Transfer" };
+          const type = typeRaw ? typeMap[typeRaw.toLowerCase()] : null;
+          const accountId = params.get("accountId");
+          const categoryId = params.get("categoryId");
+          const batchId = params.get("batchId");
+          const needle = (params.get("q") || "").toLowerCase();
+          const fromMs = from ? Date.parse(`${from}T00:00:00.000`) : null;
+          const toMs = to ? Date.parse(`${to}T23:59:59.999`) : null;
+          let rows = transactions.filter(tx => {
+            const ms = Date.parse(tx.date);
+            if (fromMs !== null && ms < fromMs) return false;
+            if (toMs !== null && ms > toMs) return false;
+            if (type && tx.type !== type) return false;
+            if (accountId && tx.accountId !== accountId && tx.toAccountId !== accountId) return false;
+            if (categoryId && tx.categoryId !== categoryId) return false;
+            if (batchId && tx.importBatchId !== batchId) return false;
+            if (needle) {
+              const hay = `${tx.note || ""} ${accountName(tx.accountId)} ${tx.categoryId ? categoryName(tx.categoryId) : ""}`.toLowerCase();
+              if (!hay.includes(needle)) return false;
+            }
+            return true;
+          });
+          rows = rows.sort((a, b) => (params.get("order") === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)));
+          const limit = Math.min(Math.max(Number(params.get("limit") || 100), 1), 1000);
+          const offset = Math.max(Number(params.get("offset") || 0), 0);
+          return { transactions: rows.slice(offset, offset + limit).map(view), total: rows.length, limit, offset };
+        }
+        if (!id && method === "POST") {
+          const tx = normalizeTransaction(body, true);
+          const record = { id: uid("t"), ...tx };
+          transactions.push(record);
+          transactions.sort((a, b) => b.date.localeCompare(a.date));
+          recalc();
+          return { transaction: view(record) };
+        }
+        if (id && method === "GET") {
+          const tx = transactions.find(t => t.id === id);
+          if (!tx) throw new HttpError(404, "Transaction not found.");
+          return { transaction: view(tx) };
+        }
+        if (id && method === "PATCH") {
+          const index = transactions.findIndex(t => t.id === id);
+          if (index < 0) throw new HttpError(404, "Transaction not found.");
+          const old = transactions[index];
+          const merged = { ...old, ...body, date: body.date || old.date };
+          if (body.account !== undefined) delete merged.accountId;
+          if (body.category !== undefined) delete merged.categoryId;
+          if (body.toAccount !== undefined) delete merged.toAccountId;
+          const next = normalizeTransaction(merged, true);
+          transactions[index] = { id: old.id, ...next, externalId: old.externalId, importBatchId: old.importBatchId };
+          transactions.sort((a, b) => b.date.localeCompare(a.date));
+          recalc();
+          return { transaction: view(transactions.find(t => t.id === id)) };
+        }
+        if (id && method === "DELETE") {
+          const index = transactions.findIndex(t => t.id === id);
+          if (index < 0) throw new HttpError(404, "Transaction not found.");
+          transactions.splice(index, 1);
+          recalc();
+          return { deleted: true, id };
+        }
+      }
+
+      if (resource === "summary" && method === "GET") {
+        return summarize({ from: params.get("from"), to: params.get("to"), currency: params.get("currency") || undefined });
+      }
+      if (resource === "balances" && method === "GET") return computeBalances(params.get("currency") || undefined);
+
+      if (resource === "budgets") {
+        if (!id && method === "GET") return { budgets };
+        if (!id && method === "POST") {
+          const category = findCategory(body.categoryId || body.category);
+          if (!category) throw new HttpError(400, "Category not found.");
+          if (category.type !== "Expense") throw new HttpError(400, "Budgets can only target expense categories.");
+          const amount = Number(body.amount);
+          if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, "amount must be a positive number.");
+          if (budgets.some(b => b.categoryId === category.id)) throw new HttpError(409, "A budget already exists for that category.");
+          const budget = { id: uid("b"), categoryId: category.id, amount, currency: CURRENCIES.includes(String(body.currency || "").toUpperCase()) ? String(body.currency).toUpperCase() : settings.mainCurrency, period: "monthly" };
+          budgets.push(budget);
+          return { budget };
+        }
+        if (id && method === "PATCH") {
+          const budget = budgets.find(b => b.id === id);
+          if (!budget) throw new HttpError(404, "Budget not found.");
+          if (body.amount !== undefined) {
+            const amount = Number(body.amount);
+            if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, "amount must be a positive number.");
+            budget.amount = amount;
+          }
+          if (body.currency !== undefined) budget.currency = CURRENCIES.includes(String(body.currency).toUpperCase()) ? String(body.currency).toUpperCase() : budget.currency;
+          return { budget };
+        }
+        if (id && method === "DELETE") {
+          const index = budgets.findIndex(b => b.id === id);
+          if (index < 0) throw new HttpError(404, "Budget not found.");
+          budgets.splice(index, 1);
+          return { deleted: true, id };
+        }
+      }
+
+      if (resource === "recurring") {
+        if (!id && method === "GET") return { recurring };
+        if (!id && method === "POST") {
+          const tx = normalizeTransaction({ ...body, date: body.nextRunDate || body.startDate || new Date().toISOString() }, false);
+          const frequency = ["daily", "weekly", "monthly"].includes(String(body.frequency).toLowerCase()) ? String(body.frequency).toLowerCase() : null;
+          if (!frequency) throw new HttpError(400, "frequency must be daily, weekly, or monthly.");
+          const rule = { id: uid("r"), ...tx, frequency, nextRunDate: tx.date, active: body.active === false ? 0 : 1 };
+          recurring.push(rule);
+          return { recurring: rule };
+        }
+        if (id && method === "PATCH") {
+          const rule = recurring.find(r => r.id === id);
+          if (!rule) throw new HttpError(404, "Recurring rule not found.");
+          if (body.active === undefined) throw new HttpError(400, "Only the active flag can be updated.");
+          rule.active = body.active ? 1 : 0;
+          return { recurring: rule };
+        }
+        if (id && method === "DELETE") {
+          const index = recurring.findIndex(r => r.id === id);
+          if (index < 0) throw new HttpError(404, "Recurring rule not found.");
+          recurring.splice(index, 1);
+          return { deleted: true, id };
+        }
+      }
+
+      if (resource === "settings") {
+        if (method === "GET") return { settings: { ...settings } };
+        if (method === "PATCH") {
+          const allowed = ["mainCurrency", "monthStartDay", "useCustomRates", "customRates", "theme", "notificationsEnabled", "autoBackupEnabled", "backupFrequency", "backupTime"];
+          for (const key of allowed) if (body[key] !== undefined) settings[key] = body[key];
+          return { settings: { ...settings } };
+        }
+      }
+
+      if (resource === "imports") {
+        if (!id && method === "GET") return imports();
+        if (id && method === "DELETE") {
+          const batchId = id;
+          const before = transactions.length;
+          for (let i = transactions.length - 1; i >= 0; i--) {
+            if (transactions[i].importBatchId === batchId) transactions.splice(i, 1);
+          }
+          if (before === transactions.length) throw new HttpError(404, "Import batch not found.");
+          recalc();
+          return { deleted: before - transactions.length, batchId };
+        }
+      }
+
+      if (resource === "export" && method === "GET") {
+        return { version: 3, timestamp: new Date().toISOString(), accounts, transactions, categories, budgets, recurring, settings };
+      }
+
+      throw new HttpError(404, `No route for ${method} ${pathname}.`);
+    }
+
+    return {
+      request(method, path, body) {
+        const started = performance.now();
+        const cleanPath = path.split("?")[0];
+        try {
+          const result = router(method, path, body || {});
+          logs.unshift({ at: new Date().toISOString(), method, path: cleanPath, status: 200, ms: Math.round((performance.now() - started) * 10) / 10 });
+          logs.splice(50);
+          return result;
+        } catch (error) {
+          logs.unshift({ at: new Date().toISOString(), method, path: cleanPath, status: error.status || 500, ms: Math.round((performance.now() - started) * 10) / 10 });
+          logs.splice(50);
+          throw error;
+        }
+      },
+      accounts,
+      categories,
+      settings,
+      budgets,
+      recurring,
+    };
+  }
+
+  function demoRequest(method, path, body) {
+    return new Promise((resolve, reject) => {
+      const wait = 40 + Math.random() * 90;
+      setTimeout(() => {
+        try {
+          resolve(demo.request(method, path, body));
+        } catch (error) {
+          reject(error && error.status ? error : new HttpError(500, (error && error.message) || "Demo request failed"));
+        }
+      }, wait);
+    });
+  }
+
+  async function loadCore() {
+    const [accounts, categories, settings] = await Promise.all([
+      api("/api/accounts"),
+      api("/api/categories"),
+      api("/api/settings"),
+    ]);
+    state.accounts = accounts.accounts || [];
+    state.categories = categories.categories || [];
+    state.settings = settings.settings || null;
+  }
+
+  async function loadDashboard() {
+    const bounds = rangeBounds(state.range);
+    const [balances, summary, recent] = await Promise.all([
+      api(`/api/balances${query({ currency: mainCurrency() })}`),
+      api(`/api/summary${query({ ...bounds, currency: mainCurrency(), groupBy: "month" })}`),
+      api(`/api/transactions${query({ ...bounds, limit: 8, order: "desc" })}`),
+    ]);
+    state.dashboard = { balances, summary, recent: recent.transactions || [] };
+    state.loaded.dashboard = true;
+  }
+
+  async function loadTransactions() {
+    const filters = state.filters;
+    const data = await api(`/api/transactions${query({ ...filters, limit: state.tx.limit, offset: state.tx.offset }) }`.replace(/\s/g, ""));
+    state.tx.rows = data.transactions || [];
+    state.tx.total = data.total || 0;
+    state.loaded.transactions = true;
+  }
+
+  async function loadAccountsPage() {
+    state.loaded.accounts = true;
+  }
+
+  async function loadBudgets() {
+    const [budgets, spend] = await Promise.all([
+      api("/api/budgets"),
+      api(`/api/transactions${query({ from: isoDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), to: isoDay(new Date()), type: "expense", limit: 1000 })}`),
+    ]);
+    state.budgets = budgets.budgets || [];
+    const totals = {};
+    for (const tx of spend.transactions || []) {
+      if (!tx.categoryId) continue;
+      totals[tx.categoryId] = (totals[tx.categoryId] || 0) + conv(tx.amount, tx.currency, mainCurrency());
+    }
+    state.budgetSpend = totals;
+    state.loaded.budgets = true;
+  }
+
+  async function loadRecurring() {
+    const data = await api("/api/recurring");
+    state.recurring = data.recurring || [];
+    state.loaded.recurring = true;
+  }
+
+  async function loadImports() {
+    const data = await api("/api/imports");
+    state.imports = data.imports || [];
+    state.loaded.imports = true;
+  }
+
+  async function loadApiPage() {
+    const started = performance.now();
+    const [health, logs] = await Promise.all([api("/api/health"), api("/api/logs")]);
+    state.api.health = health;
+    state.api.logs = logs.logs || [];
+    state.api.latency = Math.round(performance.now() - started);
+    state.loaded.api = true;
+  }
+
+  async function refresh() {
+    state.loading = true;
+    state.error = null;
+    render();
+    try {
+      await loadCore();
+      if (state.page === "dashboard") await loadDashboard();
+      else if (state.page === "transactions") await loadTransactions();
+      else if (state.page === "accounts") await loadAccountsPage();
+      else if (state.page === "budgets") await loadBudgets();
+      else if (state.page === "recurring") await loadRecurring();
+      else if (state.page === "imports") await loadImports();
+      else if (state.page === "api") await loadApiPage();
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+    }
+    state.loading = false;
+    render();
+  }
+
+  function render() {
+    document.documentElement.dataset.theme = state.theme;
+    $("app-root").innerHTML = `
+      <div class="app">
+        ${renderSidebar()}
+        <div class="main">
+          ${renderTopbar()}
+          <div class="view">
+            ${state.loading ? '<div class="loading-bar"></div>' : ""}
+            ${state.error ? `
+              <div class="banner">
+                ${icon("alert")}
+                <span class="grow">${esc(state.error)}</span>
+                <button class="btn sm" data-action="refresh">Retry</button>
+                ${state.mode === "live" ? `<button class="btn sm ghost" data-action="open-connect">Change server</button>` : ""}
+              </div>` : ""}
+            ${renderView()}
+          </div>
+        </div>
+      </div>`;
+    renderModal();
+    $("app-root").innerHTML += renderGate();
+  }
+
+  function renderSidebar() {
+    const items = [
+      ["dashboard", "grid", "Overview", null],
+      ["transactions", "list", "Transactions", state.tx.total || null],
+      ["accounts", "wallet", "Accounts", null],
+      ["budgets", "target", "Budgets", null],
+      ["recurring", "repeat", "Recurring", null],
+      ["imports", "import", "Imports", null],
+    ];
+    const tools = [
+      ["api", "plug", "API & Sync", null],
+      ["settings", "gear", "Settings", null],
+    ];
+    const nav = (page, iconName, label, badge) => `
+      <button class="nav-item ${state.page === page ? "active" : ""}" data-action="nav" data-page="${page}">
+        ${icon(iconName)}<span>${label}</span>${badge !== null && badge !== undefined ? `<span class="nav-badge">${badge}</span>` : ""}
+      </button>`;
+    return `
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">S</div>
+          <div class="brand-text">
+            <div class="brand-name">Smart Ledger</div>
+            <div class="brand-sub">Desktop prototype</div>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">Ledger</div>
+          ${items.map(item => nav(...item)).join("")}
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">System</div>
+          ${tools.map(item => nav(...item)).join("")}
+        </div>
+        <div class="sidebar-foot">
+          <div class="conn-card">
+            <div class="conn-row"><span class="dot ${state.mode === "live" ? "live" : "demo"}"></span>${state.mode === "live" ? "Phone connected" : "Demo data"}</div>
+            <div class="conn-meta">${esc(state.mode === "live" ? state.baseUrl.replace(/^https?:\/\//, "") : "sample ledger · local")}</div>
+            <button class="btn sm conn-btn" data-action="open-connect">${state.mode === "live" ? "Connection settings" : "Connect to phone"}</button>
+          </div>
+          <div class="conn-meta" style="text-align:center">prototype · not shipped</div>
+        </div>
+      </aside>`;
+  }
+
+  function renderTopbar() {
+    const meta = PAGE_META[state.page] || PAGE_META.dashboard;
+    const range = state.page === "dashboard" ? `
+      <select data-change="range" aria-label="Date range">
+        ${RANGE_OPTIONS.map(([value, label]) => `<option value="${value}" ${state.range === value ? "selected" : ""}>${label}</option>`).join("")}
+      </select>` : "";
+    const chip = state.mode === "live"
+      ? `<span class="chip live">${icon("link", "icon")} Live</span>`
+      : `<span class="chip demo">${icon("alert", "icon")} Demo data</span>`;
+    const showNew = state.page === "dashboard" || state.page === "transactions";
+    return `
+      <header class="topbar">
+        <div class="tb-title">
+          <h1>${meta[0]}</h1>
+          <p>${meta[1]}</p>
+        </div>
+        <div class="tb-actions">
+          ${chip}
+          ${range}
+          <button class="icon-btn" data-action="theme" title="Toggle theme">${icon("moon")}</button>
+          <button class="icon-btn" data-action="refresh" title="Refresh">${icon("refresh")}</button>
+          ${showNew ? `<button class="btn primary" data-action="new-tx">${icon("plus")} New transaction</button>` : ""}
+        </div>
+      </header>`;
+  }
+
+  function renderView() {
+    if (!state.loaded[state.page] && state.loading) return skeletonPage();
+    switch (state.page) {
+      case "dashboard": return renderDashboard();
+      case "transactions": return renderTransactions();
+      case "accounts": return renderAccounts();
+      case "budgets": return renderBudgets();
+      case "recurring": return renderRecurring();
+      case "imports": return renderImports();
+      case "api": return renderApi();
+      case "settings": return renderSettings();
+      default: return "";
+    }
+  }
+
+  function skeletonPage() {
+    return `
+      <div class="grid kpis">${[1, 2, 3, 4].map(() => `<div class="card kpi"><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:45%;height:22px"></div><div class="skeleton" style="width:35%"></div></div>`).join("")}</div>
+      <div class="grid two-col" style="margin-top:16px">
+        <div class="card" style="height:280px;display:grid;place-items:center"><div class="skeleton" style="width:80%;height:200px"></div></div>
+        <div class="card" style="height:280px;display:grid;place-items:center"><div class="skeleton" style="width:60%;height:200px"></div></div>
+      </div>`;
+  }
+
+  function renderDashboard() {
+    if (!state.dashboard) return skeletonPage();
+    const { balances, summary, recent } = state.dashboard;
+    const currency = summary.currency || mainCurrency();
+    const kpis = [
+      ["Net worth", fmtMoney(balances.netWorth, balances.currency), `${balances.accounts.length} accounts`, "wallet2", ""],
+      ["Income", fmtMoney(summary.totals.income, currency), `${summary.totals.count} entries in range`, "arrow-down", "pos"],
+      ["Expenses", fmtMoney(summary.totals.expense, currency), `fees ${fmtMoney(summary.totals.fees, currency)}`, "arrow-up", "neg"],
+      ["Net flow", fmtMoney(summary.totals.net, currency), summary.totals.net >= 0 ? "Surplus" : "Deficit", "grid", summary.totals.net >= 0 ? "pos" : "neg"],
+    ];
+    const periods = summary.byPeriod.slice(-6);
+    const categories = summary.byCategory.filter(item => item.type === "Expense").slice(0, 6);
+    const donutTotal = categories.reduce((sum, item) => sum + item.total, 0);
+    return `
+      <div class="grid kpis">
+        ${kpis.map(([label, value, sub, iconName, cls]) => `
+          <div class="card kpi">
+            <span class="k-icon">${icon(iconName)}</span>
+            <span class="k-label">${label}</span>
+            <span class="k-value ${cls}">${value}</span>
+            <span class="k-sub">${sub}</span>
+          </div>`).join("")}
+      </div>
+
+      <div class="grid two-col" style="margin-top:16px">
+        <div class="card">
+          <div class="card-head"><div><h3>Income vs expenses</h3><p>${periods.length ? `${periods[0].period} – ${periods[periods.length - 1].period}` : "No data in range"}</p></div>
+            <span class="chip">${currency}</span></div>
+          ${periods.length ? barChart(periods) : emptyState("No transactions in this range")}
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>Where it goes</h3><p>Expense split by category</p></div></div>
+          ${categories.length ? donutChart(categories, donutTotal) : emptyState("No expenses in this range")}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><div><h3>Accounts</h3><p>Converted to ${balances.currency}</p></div>
+          <button class="btn sm ghost" data-action="nav" data-page="accounts">View all ${icon("arrow-up")}</button></div>
+        <div class="grid cards-4" style="padding:0 18px 18px">
+          ${balances.accounts.map(row => {
+            const account = accountById(row.id);
+            return `
+              <div class="acct-mini">
+                <span class="acct-dot" style="color:${(account && account.color) || "var(--primary)"}">${icon("wallet")}</span>
+                <div><b>${esc(row.name)}</b><small>${esc(row.currency)} · ${esc((account && account.type) || "")}</small></div>
+                <span class="amt ${row.balanceConverted < 0 ? "neg" : ""}">${fmtMoney(row.balanceConverted, balances.currency)}</span>
+              </div>`;
+          }).join("")}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><div><h3>Recent transactions</h3><p>Newest entries in range</p></div>
+          <button class="btn sm ghost" data-action="nav" data-page="transactions">Open ledger ${icon("arrow-up")}</button></div>
+        ${recent.length ? transactionsTable(recent, false) : emptyState("No transactions yet")}
+      </div>`;
+  }
+
+  function emptyState(message) {
+    return `<div class="list-empty">${icon("inbox")}<div>${esc(message)}</div></div>`;
+  }
+
+  function transactionsTable(rows, withActions) {
+    return `
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Type</th><th>Account</th><th>Category</th><th>Note</th><th class="t-right">Amount</th>
+            ${withActions ? '<th class="t-right">Actions</th>' : ""}
+          </tr></thead>
+          <tbody>
+            ${rows.map(tx => {
+              const mask = tx.hidden === 1;
+              const amount = mask ? "•••" : fmtMoney(tx.amount, tx.currency);
+              return `
+                <tr>
+                  <td class="t-muted" style="white-space:nowrap">${fmtDate(tx.date)}</td>
+                  <td><span class="badge ${tx.type}">${tx.type === "Transfer" ? "Transfer" : tx.type}</span></td>
+                  <td>${esc(tx.accountName || accountName(tx.accountId))}${tx.toAccountName ? ` <span class="t-muted">→ ${esc(tx.toAccountName)}</span>` : ""}</td>
+                  <td>${esc(tx.categoryName || (tx.categoryId ? categoryName(tx.categoryId) : "—"))}</td>
+                  <td class="t-note" title="${esc(tx.note || "")}">${esc(tx.note || "—")}</td>
+                  <td class="t-right t-num ${tx.type === "Income" ? "pos" : tx.type === "Expense" ? "neg" : ""}">${tx.type === "Income" ? "+" : tx.type === "Expense" ? "−" : ""}${amount}${tx.fee ? ` <span class="t-muted">+${fmtMoney(tx.fee, tx.currency)} fee</span>` : ""}</td>
+                  ${withActions ? `<td><div class="t-actions">
+                    <button class="btn sm ghost" data-action="edit-tx" data-id="${tx.id}" title="Edit">${icon("edit")}</button>
+                    <button class="btn sm ghost" data-action="delete-tx" data-id="${tx.id}" title="Delete">${icon("trash")}</button>
+                  </div></td>` : ""}
+                </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function barChart(periods) {
+    const width = 680;
+    const height = 220;
+    const pad = { top: 18, right: 12, bottom: 30, left: 44 };
+    const innerW = width - pad.left - pad.right;
+    const innerH = height - pad.top - pad.bottom;
+    const max = Math.max(1, ...periods.map(p => Math.max(p.income, p.expense)));
+    const ticks = 4;
+    const y = value => pad.top + innerH - (value / max) * innerH;
+    const slot = innerW / periods.length;
+    const barW = Math.min(20, Math.max(6, slot / 3.2));
+    const grid = Array.from({ length: ticks + 1 }, (_, i) => {
+      const value = (max / ticks) * i;
+      return `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value)}" y2="${y(value)}" stroke="var(--border)" stroke-dasharray="3 4" />
+              <text x="${pad.left - 8}" y="${y(value) + 3.5}" text-anchor="end" font-size="9.5" fill="var(--muted)">${fmtCompact(value)}</text>`;
+    }).join("");
+    const bars = periods.map((p, index) => {
+      const cx = pad.left + slot * index + slot / 2;
+      const x1 = cx - barW - 1;
+      const x2 = cx + 1;
+      const month = new Date(`${p.period}-01T00:00:00`).toLocaleDateString("en-GB", { month: "short" });
+      return `
+        <rect x="${x1}" y="${y(p.income)}" width="${barW}" height="${Math.max(1, pad.top + innerH - y(p.income))}" rx="3" fill="var(--income)"><title>${month} income · ${fmtMoney(p.income, mainCurrency())}</title></rect>
+        <rect x="${x2}" y="${y(p.expense)}" width="${barW}" height="${Math.max(1, pad.top + innerH - y(p.expense))}" rx="3" fill="var(--expense)"><title>${month} expense · ${fmtMoney(p.expense, mainCurrency())}</title></rect>
+        <text x="${cx}" y="${height - 10}" text-anchor="middle" font-size="10" fill="var(--muted)">${month}</text>`;
+    }).join("");
+    return `
+      <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Income and expense by month">
+        ${grid}${bars}
+      </svg>
+      <div class="legend"><span><i style="background:var(--income)"></i>Income</span><span><i style="background:var(--expense)"></i>Expenses</span></div>`;
+  }
+
+  function donutChart(items, total) {
+    const palette = ["#f43f5e", "#fb7185", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#6366f1"];
+    const sum = total || items.reduce((acc, item) => acc + item.total, 0) || 1;
+    let angle = -Math.PI / 2;
+    const size = 168;
+    const cx = size / 2;
+    const cy = size / 2;
+    const outer = 72;
+    const inner = 48;
+    const point = (radius, a) => [cx + radius * Math.cos(a), cy + radius * Math.sin(a)];
+    const segments = items.map((item, index) => {
+      const sweep = (item.total / sum) * Math.PI * 2;
+      const start = angle;
+      const end = angle + Math.max(sweep, 0.004);
+      angle = end;
+      const [x1, y1] = point(outer, start);
+      const [x2, y2] = point(outer, end);
+      const [x3, y3] = point(inner, end);
+      const [x4, y4] = point(inner, start);
+      const category = categoryById(item.categoryId);
+      const color = (category && category.color) || palette[index % palette.length];
+      return `<path d="M${x1},${y1} A${outer},${outer} 0 ${sweep > Math.PI ? 1 : 0} 1 ${x2},${y2} L${x3},${y3} A${inner},${inner} 0 ${sweep > Math.PI ? 1 : 0} 0 ${x4},${y4} Z" fill="${color}" opacity=".9"><title>${esc(item.name)} · ${fmtMoney(item.total, mainCurrency())}</title></path>`;
+    }).join("");
+    return `
+      <div class="donut-wrap">
+        <div class="donut">
+          <svg viewBox="0 0 ${size} ${size}" class="chart" role="img" aria-label="Expenses by category">
+            ${segments}
+            <text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="10" fill="var(--muted)">TOTAL</text>
+            <text x="${cx}" y="${cy + 13}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--text)">${fmtCompact(sum)}</text>
+          </svg>
+        </div>
+        <div class="legend" style="flex-direction:column;align-items:flex-start;padding:0;gap:8px">
+          ${items.map((item, index) => {
+            const category = categoryById(item.categoryId);
+            const color = (category && category.color) || palette[index % palette.length];
+            return `<span><i style="background:${color}"></i>${esc(item.name)} <b class="t-muted">${Math.round((item.total / sum) * 100)}%</b></span>`;
+          }).join("")}
+        </div>
+      </div>`;
+  }
+
+  function renderTransactions() {
+    if (!state.loaded.transactions && state.loading) return skeletonPage();
+    const totalPages = Math.max(1, Math.ceil(state.tx.total / state.tx.limit));
+    const page = Math.floor(state.tx.offset / state.tx.limit) + 1;
+    return `
+      <div class="card">
+        <div class="toolbar">
+          <div class="field search">
+            ${icon("search")}
+            <input type="text" data-search="q" value="${esc(state.filters.q)}" placeholder="Search notes, accounts, categories" />
+          </div>
+          <div class="field"><label>Type</label>
+            <select data-filter="type">
+              <option value="">All types</option>
+              ${["Income", "Expense", "Transfer"].map(type => `<option value="${type.toLowerCase()}" ${state.filters.type === type.toLowerCase() ? "selected" : ""}>${type}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field"><label>Account</label>
+            <select data-filter="accountId">
+              <option value="">All accounts</option>
+              ${state.accounts.map(account => `<option value="${account.id}" ${state.filters.accountId === account.id ? "selected" : ""}>${esc(account.name)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field"><label>Category</label>
+            <select data-filter="categoryId">
+              <option value="">All categories</option>
+              ${state.categories.map(category => `<option value="${category.id}" ${state.filters.categoryId === category.id ? "selected" : ""}>${esc(category.name)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field"><label>From</label><input type="date" data-filter="from" value="${esc(state.filters.from)}" /></div>
+          <div class="field"><label>To</label><input type="date" data-filter="to" value="${esc(state.filters.to)}" /></div>
+          <div class="field"><label>Sort</label>
+            <select data-filter="order">
+              <option value="desc" ${state.filters.order === "desc" ? "selected" : ""}>Newest first</option>
+              <option value="asc" ${state.filters.order === "asc" ? "selected" : ""}>Oldest first</option>
+            </select>
+          </div>
+          <button class="btn ghost" data-action="clear-filters">Clear</button>
+        </div>
+        ${state.tx.rows.length ? transactionsTable(state.tx.rows, true) : emptyState("No transactions match these filters")}
+        <div class="pager">
+          <span>${state.tx.total} transactions · page ${page} of ${totalPages}</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn sm" data-action="tx-prev" ${page <= 1 ? "disabled" : ""}>Previous</button>
+            <button class="btn sm" data-action="tx-next" ${page >= totalPages ? "disabled" : ""}>Next</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderAccounts() {
+    return `
+      <div class="grid cards-2" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        ${state.accounts.map(account => `
+          <div class="card card-pad">
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <span class="acct-dot" style="color:${account.color || "var(--primary)"};font-size:16px">${icon("wallet")}</span>
+              <div class="grow">
+                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:15px">${esc(account.name)}</b><span class="chip">${esc(account.type)}</span></div>
+                <div style="color:var(--muted);font-size:12px;margin-top:2px">Opening balance ${fmtMoney(account.initialBalance, account.currency)}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:19px;font-weight:650" class="${account.balance < 0 ? "neg" : ""}">${fmtMoney(account.balance, account.currency)}</div>
+                <div style="font-size:11px;color:var(--muted)">${account.currency === mainCurrency() ? "ledger currency" : `≈ ${fmtMoney(conv(account.balance, account.currency, mainCurrency()), mainCurrency())}`}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+              <button class="btn sm" data-action="edit-account" data-id="${account.id}">${icon("edit")} Edit</button>
+              <button class="btn sm ghost" data-action="view-account-tx" data-id="${account.id}">View transactions</button>
+              <span class="grow"></span>
+              <button class="btn sm danger" data-action="delete-account" data-id="${account.id}">${icon("trash")}</button>
+            </div>
+          </div>`).join("")}
+        <button class="card card-pad" style="display:flex;align-items:center;gap:10px;justify-content:center;border-style:dashed;color:var(--text-2);background:transparent;min-height:120px" data-action="new-account">
+          ${icon("plus")} Add account
+        </button>
+      </div>`;
+  }
+
+  function renderBudgets() {
+    if (!state.budgets.length) return `<div class="card">${emptyState("No budgets yet")}</div>`;
+    const monthLabel = new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="section-title">Spend this month · ${monthLabel}</div>
+        <button class="btn sm" data-action="new-budget">${icon("plus")} New budget</button>
+      </div>
+      <div class="card">
+        ${state.budgets.map(budget => {
+          const category = categoryById(budget.categoryId);
+          const spent = state.budgetSpend[budget.categoryId] || 0;
+          const limit = conv(budget.amount, budget.currency, mainCurrency());
+          const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
+          const over = spent > limit;
+          return `
+            <div class="budget-row">
+              <div>
+                <div class="budget-name">${category ? (category.icon || "🏷️") : "🏷️"} ${esc(category ? category.name : "Unknown")}
+                  ${over ? '<span class="badge Expense">Over budget</span>' : ""}</div>
+                <div class="budget-sub">${fmtMoney(spent, mainCurrency())} of ${fmtMoney(limit, mainCurrency())} · ${Math.round(pct)}% used</div>
+                <div class="progress" style="margin-top:8px"><span style="width:${pct}%;background:${over ? "var(--expense)" : "var(--primary)"}"></span></div>
+              </div>
+              <div class="budget-right">
+                <b class="${over ? "neg" : ""}">${fmtMoney(Math.max(0, limit - spent), mainCurrency())}</b>
+                <small>${over ? "over" : "remaining"}</small>
+                <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:6px">
+                  <button class="btn sm ghost" data-action="edit-budget" data-id="${budget.id}">${icon("edit")}</button>
+                  <button class="btn sm ghost" data-action="delete-budget" data-id="${budget.id}">${icon("trash")}</button>
+                </div>
+              </div>
+            </div>`;
+        }).join("")}
+      </div>`;
+  }
+
+  function renderRecurring() {
+    if (!state.recurring.length) return `<div class="card">${emptyState("No recurring rules yet")}</div>`;
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="section-title">${state.recurring.filter(r => r.active).length} active of ${state.recurring.length}</div>
+        <button class="btn sm" data-action="new-recurring">${icon("plus")} New rule</button>
+      </div>
+      <div class="card table-wrap">
+        <table>
+          <thead><tr><th>Next run</th><th>Type</th><th>Account</th><th>Category</th><th>Frequency</th><th>Note</th><th class="t-right">Amount</th><th class="t-right">Active</th><th class="t-right">Actions</th></tr></thead>
+          <tbody>
+            ${state.recurring.map(rule => `
+              <tr>
+                <td class="t-muted" style="white-space:nowrap">${fmtDate(rule.nextRunDate)}</td>
+                <td><span class="badge ${rule.type}">${rule.type}</span></td>
+                <td>${esc(accountName(rule.accountId))}${rule.toAccountId ? ` → ${esc(accountName(rule.toAccountId))}` : ""}</td>
+                <td>${rule.categoryId ? esc(categoryName(rule.categoryId)) : "—"}</td>
+                <td class="t-muted">${esc(rule.frequency)}</td>
+                <td class="t-note">${esc(rule.note || "—")}</td>
+                <td class="t-right t-num">${fmtMoney(rule.amount, rule.currency)}</td>
+                <td class="t-right">
+                  <button class="btn sm ${rule.active ? "" : "ghost"}" data-action="toggle-recurring" data-id="${rule.id}" data-active="${rule.active ? 1 : 0}">${rule.active ? icon("check") + " On" : "Paused"}</button>
+                </td>
+                <td><div class="t-actions"><button class="btn sm ghost" data-action="delete-recurring" data-id="${rule.id}" title="Delete">${icon("trash")}</button></div></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function renderImports() {
+    if (!state.imports.length) return `<div class="card">${emptyState("Nothing imported through the API yet")}</div>`;
+    return `
+      <div class="section-title" style="margin-bottom:12px">${state.imports.length} batches written by the import API</div>
+      <div class="card table-wrap">
+        <table>
+          <thead><tr><th>Batch</th><th class="t-right">Rows</th><th>First date</th><th>Last date</th><th class="t-right">Actions</th></tr></thead>
+          <tbody>
+            ${state.imports.map(batch => `
+              <tr>
+                <td class="mono" style="font-size:11.5px">${esc(batch.batchId)}</td>
+                <td class="t-right t-num">${batch.count}</td>
+                <td class="t-muted">${fmtDate(batch.firstDate)}</td>
+                <td class="t-muted">${fmtDate(batch.lastDate)}</td>
+                <td><div class="t-actions"><button class="btn sm danger" data-action="undo-import" data-id="${esc(batch.batchId)}">Undo batch</button></div></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--muted);font-size:12px;margin-top:12px">Undo deletes every transaction in the batch and recalculates balances once.</p>`;
+  }
+
+  function renderApi() {
+    const health = state.api.health;
+    const server = health && health.server;
+    return `
+      <div class="grid two-col">
+        <div class="card">
+          <div class="card-head"><div><h3>Connection</h3><p>${state.mode === "live" ? "Live phone ledger" : "Demo store"}</p></div>
+            <span class="chip ${state.mode === "live" ? "live" : "demo"}">${state.mode === "live" ? "connected" : "demo"}</span></div>
+          <div class="card-pad">
+            <div class="kv"><span>Base URL</span><b class="mono" style="font-size:11.5px">${esc(state.mode === "live" ? state.baseUrl : "demo://local")}</b></div>
+            <div class="kv"><span>Latency</span><b>${state.api.latency != null ? `${state.api.latency} ms` : "—"}</b></div>
+            <div class="kv"><span>Server running</span><b>${server ? (server.running ? "yes" : "no") : "—"}</b></div>
+            <div class="kv"><span>Port</span><b>${server ? server.port : "—"}</b></div>
+            <div class="kv"><span>Addresses</span><b class="mono" style="font-size:11.5px">${server ? esc((server.addresses || []).join(", ") || server.host) : "—"}</b></div>
+            <div class="kv"><span>Requests served</span><b>${server ? server.requestCount : "—"}</b></div>
+            <div class="kv"><span>Access token</span><b><button class="btn sm ghost" data-action="reveal-token">${icon("link")} ${state.mode === "live" ? "Reveal" : "n/a in demo"}</button></b></div>
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <button class="btn" data-action="refresh">${icon("refresh")} Refresh</button>
+              <button class="btn" data-action="copy-conn">Copy connection JSON</button>
+              <button class="btn ghost" data-action="open-connect">Change server</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>Ledger size</h3><p>Confirmed by /api/health</p></div></div>
+          <div class="card-pad">
+            ${health ? Object.entries(health.counts).map(([key, value]) => `<div class="kv"><span>${key}</span><b>${value}</b></div>`).join("") : `<div class="skeleton" style="height:120px"></div>`}
+            <div class="kv"><span>Main currency</span><b>${health ? esc(health.mainCurrency) : "—"}</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><div><h3>Recent requests</h3><p>Last 50, from /api/logs</p></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Method</th><th>Path</th><th class="t-right">Status</th><th class="t-right">ms</th></tr></thead>
+            <tbody>
+              ${state.api.logs.length ? state.api.logs.map(entry => `
+                <tr class="req-row">
+                  <td class="t-muted">${fmtDateTime(entry.at)}</td>
+                  <td>${esc(entry.method)}</td>
+                  <td>${esc(entry.path)}</td>
+                  <td class="t-right ${entry.status >= 400 ? "status-err" : "status-2xx"}">${entry.status}</td>
+                  <td class="t-right t-muted">${entry.ms}</td>
+                </tr>`).join("") : `<tr><td colspan="5" class="list-empty">No requests recorded</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><div><h3>Endpoints this UI uses</h3><p>All require Authorization: Bearer &lt;token&gt;</p></div>
+            <button class="btn sm ghost" data-action="copy-curl">Copy curl</button></div>
+        <div class="card-pad" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px">
+          ${["GET /api/health","GET /api/version","GET /api/logs","GET|POST /api/transactions","GET|PATCH|DELETE /api/transactions/:id","POST /api/import/transactions","GET /api/imports","DELETE /api/imports/:batchId","GET|POST /api/accounts","PATCH|DELETE /api/accounts/:id","GET|POST /api/categories","DELETE /api/categories/:id","GET|POST /api/budgets","PATCH|DELETE /api/budgets/:id","GET|POST /api/recurring","PATCH|DELETE /api/recurring/:id","GET|PATCH /api/settings","GET /api/summary","GET /api/balances","GET /api/export"].map(item => `<div class="endpoint">${item}</div>`).join("")}
+        </div>
+      </div>`;
+  }
+
+  function renderSettings() {
+    const s = state.settings;
+    if (!s) return skeletonPage();
+    return `
+      <div class="grid settings-grid">
+        <div class="card">
+          <div class="card-head"><div><h3>Money</h3><p>Applies to the API and the mobile app</p></div></div>
+          <div class="card-pad" style="display:grid;gap:13px">
+            <div class="field"><label>Main currency</label>
+              <select id="set-currency">${CURRENCIES.map(code => `<option value="${code}" ${s.mainCurrency === code ? "selected" : ""}>${code}</option>`).join("")}</select>
+            </div>
+            <div class="field"><label>Month starts on day</label>
+              <input type="number" id="set-month-start" min="1" max="28" value="${s.monthStartDay}" />
+              <span class="hint">Budgets and summaries use this boundary.</span>
+            </div>
+            <div class="switch"><input type="checkbox" id="set-rates" ${s.useCustomRates ? "checked" : ""} /><label for="set-rates">Use custom exchange rates</label></div>
+            <div class="rate-grid">
+              ${["USD", "AED", "MYR"].map(code => `
+                <div class="field"><label>1 ${code} = PKR</label>
+                  <input type="number" step="0.01" id="rate-${code}" value="${(s.customRates && s.customRates[code]) || DEFAULT_RATES[code]}" /></div>`).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h3>Appearance & alerts</h3><p>Shared device preferences</p></div></div>
+          <div class="card-pad" style="display:grid;gap:13px">
+            <div class="field"><label>Theme</label>
+              <select id="set-theme">
+                ${["system", "light", "dark"].map(theme => `<option value="${theme}" ${s.theme === theme ? "selected" : ""}>${theme}</option>`).join("")}
+              </select>
+            </div>
+            <div class="switch"><input type="checkbox" id="set-notifications" ${s.notificationsEnabled ? "checked" : ""} /><label for="set-notifications">Notifications enabled</label></div>
+            <div class="switch"><input type="checkbox" id="set-backup" ${s.autoBackupEnabled ? "checked" : ""} /><label for="set-backup">Automatic backup</label></div>
+            <div class="row">
+              <div class="field grow"><label>Frequency</label>
+                <select id="set-backup-freq">${["daily", "weekly", "monthly"].map(freq => `<option value="${freq}" ${s.backupFrequency === freq ? "selected" : ""}>${freq}</option>`).join("")}</select>
+              </div>
+              <div class="field grow"><label>Time</label><input type="time" id="set-backup-time" value="${s.backupTime}" /></div>
+            </div>
+            <button class="btn primary" data-action="save-settings">Save preferences</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h3>Security</h3><p>Managed on the phone only</p></div></div>
+          <div class="card-pad">
+            <div class="kv"><span>App lock</span><b>${s.hasPin ? "PIN set" : "Not configured"}</b></div>
+            <div class="kv"><span>PIN change over API</span><b>Blocked</b></div>
+            <div class="kv"><span>API token</span><b>${state.mode === "live" ? "stored in this tab" : "demo"}</b></div>
+            <p class="gate-note" style="margin-top:12px">The API deliberately refuses to read or change the PIN. Manage it in Settings on the phone.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h3>Local API server</h3><p>Hosted by the Android app</p></div></div>
+          <div class="card-pad">
+            <div class="kv"><span>Port</span><b>${s.apiServerPort}</b></div>
+            <div class="kv"><span>Allow LAN</span><b>${s.apiServerAllowLan ? "yes" : "loopback only"}</b></div>
+            <div class="kv"><span>Last backup</span><b>${s.lastBackupAt ? fmtDateTime(s.lastBackupAt) : "never"}</b></div>
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <button class="btn" data-action="open-connect">Change connection</button>
+              <button class="btn ghost" data-action="export">${icon("download")} Export JSON</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderGate() {
+    if (!state.gateOpen) return "";
+    return `
+      <div class="gate">
+        <div class="gate-card">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div class="brand-mark">S</div>
+            <div><div class="brand-name">Smart Ledger</div><div class="brand-sub">Desktop web UI</div></div>
+          </div>
+          <h2>Connect to your ledger</h2>
+          <p>Point this page at the local API running in the Android app. The ledger stays on the phone; this is just a window into it.</p>
+          <div class="gate-form">
+            <div class="field"><label>Base URL</label>
+              <input id="conn-base" type="text" placeholder="http://192.168.1.23:8765" value="${esc(state.mode === "live" ? state.baseUrl : "")}" />
+            </div>
+            <div class="field"><label>Access token</label>
+              <input id="conn-token" type="password" placeholder="Settings → Local API → Copy connection details" value="${esc(state.mode === "live" ? state.token : "")}" />
+            </div>
+            <div class="row">
+              <button class="btn primary grow" data-action="connect">Connect</button>
+              <button class="btn grow" data-action="connect-demo">Use demo data</button>
+            </div>
+            ${state.gateOpen && state.mode === "live" ? `<button class="btn ghost" data-action="close-gate">Cancel</button>` : ""}
+          </div>
+          <p class="gate-note" style="margin-top:16px">The phone must be awake with the server started (the "Smart Ledger API is running" notification). Plain HTTP is blocked inside some sandboxed previews — open this file directly in your browser if the connection fails.</p>
+        </div>
+      </div>`;
+  }
+
+  function renderModal() {
+    const root = $("modal-root");
+    if (!state.modal) {
+      root.innerHTML = "";
+      return;
+    }
+    const content = modalContent();
+    root.innerHTML = `<div class="modal-backdrop" id="modal-backdrop"><div class="modal ${content.wide ? "wide" : ""}">${content.html}</div></div>`;
+  }
+
+  function modalHeader(title, subtitle) {
+    return `<div class="modal-head"><div><h2>${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ""}</div>
+      <button class="icon-btn" data-action="close-modal" title="Close">${icon("x")}</button></div>`;
+  }
+
+  function modalContent() {
+    const modal = state.modal;
+    if (modal.kind === "confirm") {
+      return { html: `${modalHeader(esc(modal.title), "This cannot be undone.")}
+        <p style="color:var(--text-2);font-size:13px">${esc(modal.message)}</p>
+        <div class="modal-foot"><button class="btn" data-action="close-modal">Cancel</button>
+        <button class="btn danger" data-action="confirm-yes">${esc(modal.confirmLabel || "Delete")}</button></div>` };
+    }
+    if (modal.kind === "tx") return { wide: true, html: transactionForm(modal.tx) };
+    if (modal.kind === "account") return { html: accountForm(modal.account) };
+    if (modal.kind === "budget") return { html: budgetForm(modal.budget) };
+    if (modal.kind === "recurring") return { wide: true, html: recurringForm(modal.rule) };
+    return { html: "" };
+  }
+
+  function transactionForm(tx) {
+    const editing = !!tx;
+    const type = tx ? tx.type : "Expense";
+    const currency = tx ? tx.currency : mainCurrency();
+    const filteredCategories = state.categories.filter(category => category.type === type);
+    return `
+      ${modalHeader(editing ? "Edit transaction" : "New transaction", editing ? "Changes recalculate account balances" : "Written to the ledger and synced everywhere")}
+      <div class="modal-body">
+        <div class="row">
+          <div class="field grow"><label>Type</label>
+            <select id="tx-type" data-change="tx-type">
+              ${["Income", "Expense", "Transfer"].map(option => `<option ${type === option ? "selected" : ""}>${option}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field grow"><label>Date</label><input type="date" id="tx-date" value="${tx ? esc(tx.date.slice(0, 10)) : isoDay(new Date())}" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Amount</label><input type="number" step="0.01" min="0" id="tx-amount" value="${tx ? tx.amount : ""}" placeholder="0.00" /></div>
+          <div class="field"><label>Currency</label>
+            <select id="tx-currency">${CURRENCIES.map(code => `<option value="${code}" ${currency === code ? "selected" : ""}>${code}</option>`).join("")}</select>
+          </div>
+          <div class="field grow"><label>Fee (optional)</label><input type="number" step="0.01" min="0" id="tx-fee" value="${tx && tx.fee ? tx.fee : ""}" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>${type === "Transfer" ? "From account" : "Account"}</label>
+            <select id="tx-account" data-change="tx-account">
+              ${state.accounts.map(account => `<option value="${account.id}" ${tx && tx.accountId === account.id ? "selected" : ""}>${esc(account.name)} (${account.currency})</option>`).join("")}
+            </select>
+          </div>
+          <div class="field grow" id="tx-category-field" ${type === "Transfer" ? 'style="display:none"' : ""}><label>Category</label>
+            <select id="tx-category">
+              ${filteredCategories.map(category => `<option value="${category.id}" ${tx && tx.categoryId === category.id ? "selected" : ""}>${esc(category.name)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field grow" id="tx-to-field" ${type !== "Transfer" ? 'style="display:none"' : ""}><label>To account</label>
+            <select id="tx-to">
+              ${state.accounts.filter(account => !tx || account.id !== tx.accountId).map(account => `<option value="${account.id}" ${tx && tx.toAccountId === account.id ? "selected" : ""}>${esc(account.name)} (${account.currency})</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Note</label><input type="text" id="tx-note" value="${tx ? esc(tx.note || "") : ""}" placeholder="What was this for?" /></div>
+        <div class="switch"><input type="checkbox" id="tx-hidden" ${tx && tx.hidden === 1 ? "checked" : ""} /><label for="tx-hidden">Hide amount in lists</label></div>
+      </div>
+      <div class="modal-foot">
+        ${editing ? `<button class="btn danger" data-action="delete-tx" data-id="${tx.id}">Delete</button><span class="spacer"></span>` : '<span class="spacer"></span>'}
+        <button class="btn" data-action="close-modal">Cancel</button>
+        <button class="btn primary" data-action="save-tx" data-id="${editing ? tx.id : ""}">${editing ? "Save changes" : "Add transaction"}</button>
+      </div>`;
+  }
+
+  function accountForm(account) {
+    const editing = !!account;
+    const idSuffix = editing ? account.id : "new";
+    return `
+      ${modalHeader(editing ? "Edit account" : "New account", editing ? "Opening balance cannot change once transactions exist" : "Create an account to track a balance")}
+      <div class="modal-body">
+        <div class="field"><label>Name</label><input type="text" id="acc-name-${idSuffix}" value="${account ? esc(account.name) : ""}" placeholder="e.g. HBL Bank" /></div>
+        <div class="row">
+          <div class="field grow"><label>Type</label>
+            <select id="acc-type-${idSuffix}">${["Bank", "Cash", "Investment"].map(type => `<option ${account && account.type === type ? "selected" : ""}>${type}</option>`).join("")}</select>
+          </div>
+          <div class="field grow"><label>Currency</label>
+            <select id="acc-currency-${idSuffix}">${CURRENCIES.map(code => `<option value="${code}" ${(account ? account.currency : mainCurrency()) === code ? "selected" : ""}>${code}</option>`).join("")}</select>
+          </div>
+        </div>
+        ${editing
+          ? `<div class="field"><label>Opening balance</label><input type="text" value="${fmtMoney(account.initialBalance, account.currency)}" disabled /><span class="hint">Managed by the app once transactions exist.</span></div>`
+          : `<div class="field"><label>Opening balance</label><input type="number" step="0.01" id="acc-initial-${idSuffix}" value="0" /></div>`}
+      </div>
+      <div class="modal-foot">
+        ${editing ? `<button class="btn danger" data-action="delete-account" data-id="${account.id}">Delete</button><span class="spacer"></span>` : '<span class="spacer"></span>'}
+        <button class="btn" data-action="close-modal">Cancel</button>
+        <button class="btn primary" data-action="save-account" data-id="${editing ? account.id : ""}">${editing ? "Save" : "Create account"}</button>
+      </div>`;
+  }
+
+  function budgetForm(budget) {
+    const editing = !!budget;
+    const used = new Set(state.budgets.map(item => item.categoryId));
+    const options = state.categories.filter(category => category.type === "Expense" && (editing ? category.id === budget.categoryId : !used.has(category.id)));
+    return `
+      ${modalHeader(editing ? "Edit budget" : "New budget", "Monthly limit per expense category")}
+      <div class="modal-body">
+        <div class="field"><label>Category</label>
+          <select id="budget-category" ${editing ? "disabled" : ""}>
+            ${options.length ? options.map(category => `<option value="${category.id}" ${editing && budget.categoryId === category.id ? "selected" : ""}>${esc(category.name)}</option>`).join("") : '<option value="">No available expense categories</option>'}
+          </select>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Monthly amount</label><input type="number" step="0.01" min="0" id="budget-amount" value="${editing ? budget.amount : ""}" /></div>
+          <div class="field"><label>Currency</label>
+            <select id="budget-currency">${CURRENCIES.map(code => `<option value="${code}" ${(editing ? budget.currency : mainCurrency()) === code ? "selected" : ""}>${code}</option>`).join("")}</select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" data-action="close-modal">Cancel</button>
+        <button class="btn primary" data-action="save-budget" data-id="${editing ? budget.id : ""}">${editing ? "Save" : "Create budget"}</button>
+      </div>`;
+  }
+
+  function recurringForm(rule) {
+    const type = rule ? rule.type : "Expense";
+    const filteredCategories = state.categories.filter(category => category.type === type);
+    return `
+      ${modalHeader("New recurring rule", "The app creates the transaction automatically")}
+      <div class="modal-body">
+        <div class="row">
+          <div class="field grow"><label>Type</label>
+            <select id="rec-type" data-change="rec-type">${["Income", "Expense", "Transfer"].map(option => `<option ${type === option ? "selected" : ""}>${option}</option>`).join("")}</select>
+          </div>
+          <div class="field grow"><label>Frequency</label>
+            <select id="rec-frequency">${["daily", "weekly", "monthly"].map(freq => `<option ${freq === "monthly" ? "selected" : ""}>${freq}</option>`).join("")}</select>
+          </div>
+          <div class="field grow"><label>Next run</label><input type="date" id="rec-date" value="${isoDay(new Date(Date.now() + 86400000))}" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Amount</label><input type="number" step="0.01" min="0" id="rec-amount" placeholder="0.00" /></div>
+          <div class="field"><label>Currency</label>
+            <select id="rec-currency">${CURRENCIES.map(code => `<option value="${code}" ${mainCurrency() === code ? "selected" : ""}>${code}</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>${type === "Transfer" ? "From account" : "Account"}</label>
+            <select id="rec-account">${state.accounts.map(account => `<option value="${account.id}">${esc(account.name)} (${account.currency})</option>`).join("")}</select>
+          </div>
+          <div class="field grow" id="rec-category-field" ${type === "Transfer" ? 'style="display:none"' : ""}><label>Category</label>
+            <select id="rec-category">${filteredCategories.map(category => `<option value="${category.id}">${esc(category.name)}</option>`).join("")}</select>
+          </div>
+          <div class="field grow" id="rec-to-field" ${type !== "Transfer" ? 'style="display:none"' : ""}><label>To account</label>
+            <select id="rec-to">${state.accounts.map(account => `<option value="${account.id}">${esc(account.name)}</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="field"><label>Note</label><input type="text" id="rec-note" placeholder="Rent, salary, subscription…" /></div>
+      </div>
+      <div class="modal-foot"><span class="spacer"></span>
+        <button class="btn" data-action="close-modal">Cancel</button>
+        <button class="btn primary" data-action="save-recurring">Create rule</button>
+      </div>`;
+  }
+
+  function openModal(kind, payload = {}) {
+    state.modal = { kind, ...payload };
+    renderModal();
+  }
+
+  function closeModal() {
+    state.modal = null;
+    renderModal();
+  }
+
+  function openTxModal(tx) {
+    openModal("tx", { tx: tx || null });
+  }
+
+  function syncTxForm() {
+    const type = val("tx-type");
+    const categoryField = $("tx-category-field");
+    const toField = $("tx-to-field");
+    const categorySelect = $("tx-category");
+    const accountSelect = $("tx-account");
+    const currencySelect = $("tx-currency");
+    if (!categoryField || !toField) return;
+    categoryField.style.display = type === "Transfer" ? "none" : "";
+    toField.style.display = type === "Transfer" ? "" : "none";
+    if (categorySelect) {
+      const selected = categorySelect.value;
+      categorySelect.innerHTML = state.categories
+        .filter(category => category.type === type)
+        .map(category => `<option value="${category.id}">${esc(category.name)}</option>`)
+        .join("");
+      if (selected && categorySelect.querySelector(`option[value="${selected}"]`)) categorySelect.value = selected;
+    }
+    if (accountSelect && currencySelect) {
+      const account = accountById(accountSelect.value);
+      if (account) currencySelect.value = account.currency;
+    }
+    const toSelect = $("tx-to");
+    if (toSelect && accountSelect) {
+      const current = toSelect.value;
+      toSelect.innerHTML = state.accounts
+        .filter(account => account.id !== accountSelect.value)
+        .map(account => `<option value="${account.id}">${esc(account.name)} (${account.currency})</option>`)
+        .join("");
+      if (current && toSelect.querySelector(`option[value="${current}"]`)) toSelect.value = current;
+    }
+  }
+
+  async function saveTransaction(id) {
+    const type = val("tx-type");
+    const body = {
+      type: type.toLowerCase(),
+      date: val("tx-date"),
+      amount: Number(val("tx-amount")),
+      currency: val("tx-currency"),
+      accountId: val("tx-account"),
+      fee: val("tx-fee") ? Number(val("tx-fee")) : undefined,
+      note: val("tx-note") || undefined,
+      hidden: $("tx-hidden").checked ? true : undefined,
+    };
+    if (!body.amount || body.amount <= 0) return toast("Enter an amount greater than zero", "error");
+    if (!body.date) return toast("Pick a date", "error");
+    if (type === "Transfer") {
+      body.toAccountId = $("tx-to") ? val("tx-to") : "";
+      if (!body.toAccountId) return toast("Pick a destination account", "error");
+    } else {
+      body.categoryId = $("tx-category") ? val("tx-category") : "";
+      if (!body.categoryId) return toast("Pick a category", "error");
+    }
+    try {
+      if (id) await api(`/api/transactions/${id}`, { method: "PATCH", body });
+      else await api("/api/transactions", { method: "POST", body });
+      closeModal();
+      toast(id ? "Transaction updated" : "Transaction added", "ok");
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function saveAccount(id) {
+    const suffix = id || "new";
+    const name = val(`acc-name-${suffix}`);
+    if (!name) return toast("Give the account a name", "error");
+    const body = {
+      name,
+      type: val(`acc-type-${suffix}`).toLowerCase(),
+      currency: val(`acc-currency-${suffix}`),
+    };
+    try {
+      if (id) {
+        await api(`/api/accounts/${id}`, { method: "PATCH", body });
+        toast("Account updated", "ok");
+      } else {
+        body.initialBalance = Number(val(`acc-initial-${suffix}`) || 0);
+        await api("/api/accounts", { method: "POST", body });
+        toast("Account created", "ok");
+      }
+      closeModal();
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function saveBudget(id) {
+    const amount = Number(val("budget-amount"));
+    if (!amount || amount <= 0) return toast("Enter a monthly limit", "error");
+    const body = { amount, currency: val("budget-currency") };
+    try {
+      if (id) {
+        await api(`/api/budgets/${id}`, { method: "PATCH", body });
+        toast("Budget updated", "ok");
+      } else {
+        body.categoryId = val("budget-category");
+        if (!body.categoryId) return toast("Pick a category", "error");
+        await api("/api/budgets", { method: "POST", body });
+        toast("Budget created", "ok");
+      }
+      closeModal();
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function saveRecurring() {
+    const type = val("rec-type");
+    const body = {
+      type: type.toLowerCase(),
+      amount: Number(val("rec-amount")),
+      currency: val("rec-currency"),
+      accountId: val("rec-account"),
+      frequency: val("rec-frequency"),
+      nextRunDate: val("rec-date"),
+      note: val("rec-note") || undefined,
+    };
+    if (!body.amount || body.amount <= 0) return toast("Enter an amount", "error");
+    if (type === "Transfer") body.toAccountId = val("rec-to");
+    else body.categoryId = val("rec-category");
+    try {
+      await api("/api/recurring", { method: "POST", body });
+      closeModal();
+      toast("Recurring rule created", "ok");
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function saveSettings() {
+    const customRates = {};
+    for (const code of ["USD", "AED", "MYR"]) {
+      const rate = Number(val(`rate-${code}`));
+      if (rate > 0) customRates[code] = rate;
+    }
+    const body = {
+      mainCurrency: val("set-currency"),
+      monthStartDay: Number(val("set-month-start")),
+      useCustomRates: $("set-rates").checked,
+      customRates,
+      theme: val("set-theme"),
+      notificationsEnabled: $("set-notifications").checked,
+      autoBackupEnabled: $("set-backup").checked,
+      backupFrequency: val("set-backup-freq"),
+      backupTime: val("set-backup-time"),
+    };
+    try {
+      await api("/api/settings", { method: "PATCH", body });
+      toast("Preferences saved", "ok");
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  function confirmThen(title, message, onConfirm, confirmLabel = "Delete") {
+    state.modal = { kind: "confirm", title, message, confirmLabel, onConfirm };
+    renderModal();
+  }
+
+  function copyText(text, label) {
+    const finish = () => toast(`${label} copied`, "ok");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(finish).catch(() => fallbackCopy(text, finish));
+    } else {
+      fallbackCopy(text, finish);
+    }
+  }
+  function fallbackCopy(text, finish) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+      finish();
+    } catch (error) {
+      toast("Could not copy — select the text manually", "error");
+    }
+    area.remove();
+  }
+
+  document.addEventListener("click", async (event) => {
+    if (event.target && event.target.id === "modal-backdrop") {
+      closeModal();
+      return;
+    }
+    const trigger = event.target.closest("[data-action]");
+    if (!trigger) return;
+    const action = trigger.dataset.action;
+    const id = trigger.dataset.id;
+
+    if (action === "nav") {
+      state.page = trigger.dataset.page;
+      if (state.page === "transactions") state.tx.offset = 0;
+      refresh();
+    } else if (action === "refresh") {
+      refresh();
+    } else if (action === "theme") {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      saveConnection();
+      render();
+    } else if (action === "open-connect") {
+      state.gateOpen = true;
+      render();
+    } else if (action === "close-gate") {
+      state.gateOpen = false;
+      render();
+    } else if (action === "connect-demo") {
+      state.mode = "demo";
+      state.baseUrl = "";
+      state.token = "";
+      state.gateOpen = false;
+      saveConnection();
+      toast("Demo ledger loaded", "ok");
+      refresh();
+    } else if (action === "connect") {
+      const baseUrl = val("conn-base");
+      const token = val("conn-token");
+      if (!baseUrl || !token) return toast("Base URL and token are required", "error");
+      const previous = { mode: state.mode, baseUrl: state.baseUrl, token: state.token };
+      state.mode = "live";
+      state.baseUrl = baseUrl;
+      state.token = token;
+      try {
+        const health = await api("/api/health");
+        state.gateOpen = false;
+        saveConnection();
+        toast(`Connected · ${health.counts.transactions} transactions`, "ok");
+        await refresh();
+      } catch (error) {
+        state.mode = previous.mode;
+        state.baseUrl = previous.baseUrl;
+        state.token = previous.token;
+        toast(`Connection failed: ${error.message}`, "error");
+        render();
+      }
+    } else if (action === "new-tx") {
+      openTxModal(null);
+    } else if (action === "edit-tx") {
+      const row = state.tx.rows.find(item => item.id === id) || (state.dashboard && state.dashboard.recent.find(item => item.id === id));
+      openTxModal(row || null);
+    } else if (action === "delete-tx") {
+      confirmThen("Delete transaction?", "The account balance will be adjusted back.", async () => {
+        try {
+          await api(`/api/transactions/${id}`, { method: "DELETE" });
+          toast("Transaction deleted", "ok");
+          await refresh();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      });
+    } else if (action === "save-tx") {
+      await saveTransaction(id || null);
+    } else if (action === "close-modal") {
+      closeModal();
+    } else if (action === "confirm-yes") {
+      const callback = state.modal && state.modal.onConfirm;
+      closeModal();
+      if (callback) await callback();
+    } else if (action === "new-account") {
+      openModal("account", { account: null });
+    } else if (action === "edit-account") {
+      openModal("account", { account: accountById(id) || null });
+    } else if (action === "save-account") {
+      await saveAccount(id || null);
+    } else if (action === "delete-account") {
+      confirmThen("Delete account?", "Its transactions are removed too, and balances recalculate.", async () => {
+        try {
+          await api(`/api/accounts/${id}`, { method: "DELETE" });
+          toast("Account deleted", "ok");
+          await refresh();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      });
+    } else if (action === "view-account-tx") {
+      state.page = "transactions";
+      state.filters.accountId = id;
+      state.tx.offset = 0;
+      refresh();
+    } else if (action === "new-budget") {
+      openModal("budget", { budget: null });
+    } else if (action === "edit-budget") {
+      openModal("budget", { budget: state.budgets.find(item => item.id === id) || null });
+    } else if (action === "save-budget") {
+      await saveBudget(id || null);
+    } else if (action === "delete-budget") {
+      confirmThen("Delete budget?", "Spending history is not affected.", async () => {
+        try {
+          await api(`/api/budgets/${id}`, { method: "DELETE" });
+          toast("Budget deleted", "ok");
+          await refresh();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      });
+    } else if (action === "new-recurring") {
+      openModal("recurring", { rule: null });
+    } else if (action === "save-recurring") {
+      await saveRecurring();
+    } else if (action === "toggle-recurring") {
+      const active = trigger.dataset.active === "1";
+      try {
+        await api(`/api/recurring/${id}`, { method: "PATCH", body: { active: !active } });
+        await refresh();
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    } else if (action === "delete-recurring") {
+      confirmThen("Delete recurring rule?", "Future transactions will not be created.", async () => {
+        try {
+          await api(`/api/recurring/${id}`, { method: "DELETE" });
+          toast("Rule deleted", "ok");
+          await refresh();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      });
+    } else if (action === "undo-import") {
+      confirmThen("Undo this import?", "Every transaction in the batch is deleted and balances are recalculated.", async () => {
+        try {
+          await api(`/api/imports/${encodeURIComponent(id)}`, { method: "DELETE" });
+          toast("Import undone", "ok");
+          await refresh();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      }, "Undo import");
+    } else if (action === "tx-prev") {
+      state.tx.offset = Math.max(0, state.tx.offset - state.tx.limit);
+      await loadTransactions();
+      render();
+    } else if (action === "tx-next") {
+      state.tx.offset += state.tx.limit;
+      await loadTransactions();
+      render();
+    } else if (action === "clear-filters") {
+      state.filters = { q: "", type: "", accountId: "", categoryId: "", from: "", to: "", order: "desc" };
+      state.tx.offset = 0;
+      await loadTransactions();
+      render();
+    } else if (action === "save-settings") {
+      await saveSettings();
+    } else if (action === "reveal-token") {
+      if (state.mode === "live") copyText(state.token, "Access token");
+      else toast("No token in demo mode");
+    } else if (action === "copy-conn") {
+      if (state.mode === "live") copyText(JSON.stringify({ baseUrl: state.baseUrl, token: state.token }, null, 2), "Connection JSON");
+      else toast("Demo mode has no connection details");
+    } else if (action === "copy-curl") {
+      const base = state.mode === "live" ? state.baseUrl : "http://<phone-ip>:8765";
+      const token = state.mode === "live" ? state.token : "<token>";
+      copyText(`curl -s ${base}/api/health -H "Authorization: Bearer ${token}"`, "curl command");
+    } else if (action === "export") {
+      try {
+        if (state.mode === "demo") {
+          const data = await api("/api/export");
+          copyText(JSON.stringify(data, null, 2), "Export JSON");
+        } else {
+          const response = await fetch(`${state.baseUrl.replace(/\/+$/, "")}/api/export`, { headers: { Authorization: `Bearer ${state.token}` } });
+          const data = await response.json();
+          copyText(JSON.stringify(data, null, 2), "Export JSON");
+        }
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    }
+  });
+
+  document.addEventListener("change", async (event) => {
+    const trigger = event.target.closest("[data-change]");
+    if (!trigger) return;
+    const kind = trigger.dataset.change;
+    if (kind === "range") {
+      state.range = trigger.value;
+      await loadDashboard();
+      render();
+    } else if (kind === "tx-type" || kind === "rec-type") {
+      if (kind === "tx-type") syncTxForm();
+      if (kind === "rec-type") {
+        const type = trigger.value;
+        const categoryField = $("rec-category-field");
+        const toField = $("rec-to-field");
+        const categorySelect = $("rec-category");
+        if (categoryField) categoryField.style.display = type === "Transfer" ? "none" : "";
+        if (toField) toField.style.display = type === "Transfer" ? "" : "none";
+        if (categorySelect) {
+          const selected = categorySelect.value;
+          categorySelect.innerHTML = state.categories
+            .filter(category => category.type === type)
+            .map(category => `<option value="${category.id}">${esc(category.name)}</option>`)
+            .join("");
+          if (selected && categorySelect.querySelector(`option[value="${selected}"]`)) categorySelect.value = selected;
+        }
+      }
+    } else if (kind === "tx-account") {
+      syncTxForm();
+    }
+  });
+
+  let searchTimer = null;
+  document.addEventListener("input", (event) => {
+    const trigger = event.target.closest("[data-filter]");
+    if (!trigger) return;
+    const key = trigger.dataset.filter;
+    state.filters[key] = trigger.value;
+    state.tx.offset = 0;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      await loadTransactions();
+      render();
+    }, 280);
+  });
+
+  document.addEventListener("input", (event) => {
+    if (!event.target.matches("[data-search]")) return;
+    state.filters.q = event.target.value;
+    state.tx.offset = 0;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      await loadTransactions();
+      render();
+      const field = document.querySelector("[data-search]");
+      if (field) {
+        field.focus();
+        field.setSelectionRange(field.value.length, field.value.length);
+      }
+    }, 280);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      if (state.modal) closeModal();
+      else if (state.gateOpen) state.gateOpen = false, render();
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      const field = document.querySelector("[data-search]");
+      if (field) {
+        event.preventDefault();
+        field.focus();
+      }
+    }
+  });
+
+  function applyHash() {
+    const raw = location.hash.replace(/^#/, "");
+    if (!raw) return;
+    const params = new URLSearchParams(raw);
+    const page = params.get("page");
+    if (page && PAGE_META[page]) state.page = page;
+    const theme = params.get("theme");
+    if (theme === "dark" || theme === "light") state.theme = theme;
+    const range = params.get("range");
+    if (range && RANGE_OPTIONS.some(([value]) => value === range)) state.range = range;
+  }
+
+  async function boot() {
+    const saved = loadConnection();
+    applyHash();
+    document.documentElement.dataset.theme = state.theme;
+    if (!saved) state.mode = "demo";
+    render();
+    await refresh();
+    if (state.mode === "live" && state.error) {
+      state.gateOpen = true;
+      render();
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
