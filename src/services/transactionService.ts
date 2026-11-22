@@ -50,8 +50,10 @@ class TransactionService {
         return (fromResult.values?.length || 0) + (toResult.values?.length || 0);
     }
 
-    // Add transaction and update account balance atomically
-    async createTransaction(tx: Omit<Transaction, 'id'>) {
+    // Add transaction and update account balance atomically.
+    // Pass { recalculate: false } when creating a batch (e.g. recurring catch-up)
+    // and call recalculateBalances() once at the end.
+    async createTransaction(tx: Omit<Transaction, 'id'>, options: { recalculate?: boolean } = {}) {
         const id = crypto.randomUUID();
         const { customRates, useCustomRates } = await settingsService.getSettings();
 
@@ -106,7 +108,10 @@ class TransactionService {
 
         // Recompute all balances from scratch so totals are always correct,
         // instead of relying on incremental updates that can drift.
-        await this.recalculateBalances();
+        // Batched callers opt out and reconcile once themselves.
+        if (options.recalculate !== false) {
+            await this.recalculateBalances();
+        }
         return id;
     }
 
@@ -236,6 +241,8 @@ class TransactionService {
     // Reconcile every account's balance from scratch:
     // balance = initialBalance + sum of its transactions. Fixes any drift in the
     // denormalized balance caused by interrupted writes or past bugs.
+    // Single pass over transactions (O(accounts + transactions)) instead of
+    // re-scanning every transaction for every account.
     async recalculateBalances() {
         const { customRates, useCustomRates } = await settingsService.getSettings();
 
@@ -244,27 +251,35 @@ class TransactionService {
         const txResult = await sqliteService.query('SELECT * FROM transactions');
         const txs = (txResult.values || []) as Transaction[];
 
+        const currencyById = new Map(accounts.map(acc => [acc.id, acc.currency]));
+        const deltas = new Map<string, number>();
+
+        const addDelta = (accountId: string | undefined, delta: number) => {
+            if (!accountId || !Number.isFinite(delta)) return;
+            deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta);
+        };
+
+        for (const tx of txs) {
+            // Source side (income adds, expense/transfer subtract; fee always subtracts)
+            const sourceCurrency = currencyById.get(tx.accountId);
+            if (sourceCurrency) {
+                const amount = convertCurrency(tx.amount, tx.currency, sourceCurrency, customRates, useCustomRates);
+                const fee = tx.fee ? convertCurrency(tx.fee, tx.currency, sourceCurrency, customRates, useCustomRates) : 0;
+                addDelta(tx.accountId, tx.type === 'Income' ? amount - fee : -(amount + fee));
+            }
+
+            // Transfer destination side (amount added, no fee)
+            if (tx.type === 'Transfer' && tx.toAccountId) {
+                const destCurrency = currencyById.get(tx.toAccountId);
+                if (destCurrency) {
+                    addDelta(tx.toAccountId, convertCurrency(tx.amount, tx.currency, destCurrency, customRates, useCustomRates));
+                }
+            }
+        }
+
         await sqliteService.transaction(async (db) => {
             for (const acc of accounts) {
-                let balance = acc.initialBalance;
-
-                for (const tx of txs) {
-                    // Source side (income adds, expense/transfer subtract; fee always subtracts)
-                    if (tx.accountId === acc.id) {
-                        const amount = convertCurrency(tx.amount, tx.currency, acc.currency, customRates, useCustomRates);
-                        const fee = tx.fee ? convertCurrency(tx.fee, tx.currency, acc.currency, customRates, useCustomRates) : 0;
-                        if (tx.type === 'Income') {
-                            balance += amount - fee;
-                        } else {
-                            balance -= amount + fee;
-                        }
-                    }
-                    // Transfer destination side (amount added, no fee)
-                    if (tx.type === 'Transfer' && tx.toAccountId === acc.id) {
-                        balance += convertCurrency(tx.amount, tx.currency, acc.currency, customRates, useCustomRates);
-                    }
-                }
-
+                const balance = acc.initialBalance + (deltas.get(acc.id) ?? 0);
                 await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [balance, acc.id]);
             }
         });

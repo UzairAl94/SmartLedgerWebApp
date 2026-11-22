@@ -4,6 +4,7 @@ import { formatCurrency, convertCurrency } from '../utils/format';
 import { isAmountHidden, MASK } from '../utils/visibility';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
+import { transactionService } from '../services/transactionService';
 import type { Account, Transaction, Category, UserSettings } from '../types';
 
 interface DashboardProps {
@@ -24,6 +25,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
     const [showBalance, setShowBalance] = useState(false);
     const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
     const [hasVoiceKeys, setHasVoiceKeys] = useState(false);
+    const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
 
     const hasAccounts = accounts.length > 0;
 
@@ -33,6 +35,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
             secretsService.getKey(SECRET_KEYS.elevenLabs),
             secretsService.getKey(SECRET_KEYS.deepSeek),
         ]).then(([el, ds]) => setHasVoiceKeys(!!el && !!ds));
+    }, []);
+
+    // Income/expense totals must use every transaction, not the 50-row
+    // subscription window that App passes in for the recent list.
+    useEffect(() => {
+        let active = true;
+        const load = async () => {
+            try {
+                const all = await transactionService.getAllTransactions();
+                if (active) setAllTransactions(all);
+            } catch (error) {
+                console.error('Error loading transactions for dashboard totals:', error);
+            }
+        };
+        load();
+        const unsubscribe = transactionService.subscribeToTransactions(() => { load(); });
+        return () => {
+            active = false;
+            unsubscribe();
+        };
     }, []);
 
     const handleVoiceClick = () => {
@@ -55,12 +77,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 4);
 
-    // Calculate Income and Expenses
-    const incomeTotal = transactions
+    // Calculate Income and Expenses over the full history
+    const incomeTotal = allTransactions
         .filter(t => t.type === 'Income')
         .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 
-    const expenseTotal = transactions
+    const expenseTotal = allTransactions
         .filter(t => t.type === 'Expense')
         .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
 

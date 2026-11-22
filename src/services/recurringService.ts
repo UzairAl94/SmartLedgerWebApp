@@ -31,6 +31,11 @@ class RecurringService {
         }
     }
 
+    // Public hook for other services that change rules indirectly (e.g. account deletion).
+    async refresh() {
+        await this.fetchAndNotify();
+    }
+
     async getAll(): Promise<RecurringTransaction[]> {
         const result = await sqliteService.query('SELECT * FROM recurring_transactions');
         return (result.values || []) as RecurringTransaction[];
@@ -70,34 +75,55 @@ class RecurringService {
             if (!rule.active) continue;
 
             let next = parseISO(rule.nextRunDate);
-            let guard = 0; // cap catch-up iterations
-            while (next.getTime() <= now.getTime() && guard < 400) {
-                await transactionService.createTransaction({
-                    amount: rule.amount,
-                    currency: rule.currency,
-                    categoryId: rule.type === 'Transfer' ? undefined : (rule.categoryId || undefined),
-                    accountId: rule.accountId,
-                    toAccountId: rule.type === 'Transfer' ? (rule.toAccountId || undefined) : undefined,
-                    note: rule.note || undefined,
-                    type: rule.type,
-                    fee: rule.fee || undefined,
-                    date: next.toISOString(),
-                    hidden: rule.hidden ? 1 : 0,
-                });
-                created++;
-                next = advance(next, rule.frequency);
-                guard++;
+            if (Number.isNaN(next.getTime())) {
+                console.warn(`Recurring rule ${rule.id} has an invalid nextRunDate; skipping.`);
+                continue;
             }
 
-            if (guard > 0) {
-                await sqliteService.execute(
-                    'UPDATE recurring_transactions SET nextRunDate = ? WHERE id = ?',
-                    [next.toISOString(), rule.id]
-                );
+            let guard = 0; // cap catch-up iterations
+            try {
+                while (next.getTime() <= now.getTime() && guard < 400) {
+                    await transactionService.createTransaction({
+                        amount: rule.amount,
+                        currency: rule.currency,
+                        categoryId: rule.type === 'Transfer' ? undefined : (rule.categoryId || undefined),
+                        accountId: rule.accountId,
+                        toAccountId: rule.type === 'Transfer' ? (rule.toAccountId || undefined) : undefined,
+                        note: rule.note || undefined,
+                        type: rule.type,
+                        fee: rule.fee || undefined,
+                        date: next.toISOString(),
+                        hidden: rule.hidden ? 1 : 0,
+                    }, { recalculate: false });
+                    created++;
+                    next = advance(next, rule.frequency);
+                    guard++;
+                }
+            } catch (error) {
+                // A single broken rule (e.g. its account was deleted) must never
+                // block app startup or the other rules.
+                console.error(`Recurring rule ${rule.id} failed to materialize:`, error);
+            } finally {
+                // Advance past whatever was successfully posted so a failure does
+                // not duplicate those transactions on the next launch.
+                if (guard > 0) {
+                    try {
+                        await sqliteService.execute(
+                            'UPDATE recurring_transactions SET nextRunDate = ? WHERE id = ?',
+                            [next.toISOString(), rule.id]
+                        );
+                    } catch (error) {
+                        console.error(`Failed to advance recurring rule ${rule.id}:`, error);
+                    }
+                }
             }
         }
 
-        if (created > 0) await this.fetchAndNotify();
+        if (created > 0) {
+            // One reconciliation for the whole batch instead of one per transaction.
+            await transactionService.recalculateBalances();
+            await this.fetchAndNotify();
+        }
         return created;
     }
 }

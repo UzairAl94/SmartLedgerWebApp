@@ -21,12 +21,12 @@ export const ledgerEngine = {
         categories: Category[]
     ): Promise<Transaction> => {
         // Validate type
-        if (!parsed.type) {
+        if (!parsed.type || !['income', 'expense', 'transfer'].includes(parsed.type)) {
             throw new LedgerValidationError("Transaction type is required");
         }
 
         // Validate amount
-        if (!parsed.amount || parsed.amount <= 0) {
+        if (parsed.amount === null || !Number.isFinite(parsed.amount) || parsed.amount <= 0) {
             throw new LedgerValidationError("Valid amount is required");
         }
 
@@ -66,13 +66,12 @@ export const ledgerEngine = {
         const transaction: Omit<Transaction, 'id'> = {
             type: parsed.type === 'income' ? 'Income' : 'Expense',
             amount: parsed.amount!,
-            currency: parsed.currency || 'PKR', // Use parsed currency or default to PKR
+            currency: parsed.currency || account.currency,
             accountId: account.id,
             categoryId: category.id,
             date: new Date().toISOString(),
             note: parsed.note || undefined
         };
-
         const txId = await transactionService.createTransaction(transaction);
 
         return {
@@ -107,7 +106,7 @@ export const ledgerEngine = {
         const transaction: Omit<Transaction, 'id'> = {
             type: 'Transfer',
             amount: parsed.amount!,
-            currency: parsed.currency || 'PKR', // Use parsed currency or default to PKR
+            currency: parsed.currency || fromAccount.currency,
             accountId: fromAccount.id,
             toAccountId: toAccount.id,
             date: new Date().toISOString(),

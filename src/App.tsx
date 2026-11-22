@@ -73,7 +73,12 @@ const App: React.FC = () => {
         await sqliteService.initialize();
         await secretsService.seedFromEnvIfEmpty();
         // Auto-post any due recurring transactions (catch-up since last launch).
-        recurringPostedRef.current = await recurringService.materializeDue();
+        // Non-fatal: one broken rule must not block the app from starting.
+        try {
+          recurringPostedRef.current = await recurringService.materializeDue();
+        } catch (error) {
+          console.error('Failed to post recurring transactions:', error);
+        }
         // Reconcile balances on entry so totals are always correct.
         await transactionService.recalculateBalances();
         // Run a scheduled backup if one is due (guards itself internally).

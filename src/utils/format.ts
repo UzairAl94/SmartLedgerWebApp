@@ -32,6 +32,7 @@ export const convertCurrency = (
     customRates?: Record<string, number>,
     useCustomRates?: boolean
 ) => {
+    if (!Number.isFinite(amount)) return 0;
     if (from === to) return amount;
 
     // Use custom rates if provided and enabled
@@ -39,8 +40,14 @@ export const convertCurrency = (
         ? { ...exchangeRates, ...customRates }
         : exchangeRates;
 
+    const fromRate = rates[from];
+    const toRate = rates[to];
+    if (!Number.isFinite(fromRate) || !Number.isFinite(toRate) || toRate === 0) {
+        return 0;
+    }
+
     // Convert from 'from' to PKR
-    const inPKR = amount * rates[from];
+    const inPKR = amount * fromRate;
     // Convert from PKR to 'to'
-    return inPKR / rates[to];
+    return inPKR / toRate;
 };

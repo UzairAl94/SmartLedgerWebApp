@@ -74,6 +74,9 @@ class AccountService {
             .filter((p): p is string => !!p);
 
         await sqliteService.transaction(async (db) => {
+            // Remove recurring rules pointing at this account (that table has no FKs),
+            // otherwise next launch would try to post against a missing account.
+            await db.execute('DELETE FROM recurring_transactions WHERE accountId = ? OR toAccountId = ?', [id, id]);
             // Manually delete transactions associated with this account to avoid FK constraint errors
             // specifically for cases where ON DELETE CASCADE hasn't been applied to existing DBs.
             await db.execute('DELETE FROM transactions WHERE accountId = ? OR toAccountId = ?', [id, id]);
@@ -90,6 +93,10 @@ class AccountService {
         // Dynamically import to avoid circular dependency at top-level
         const { transactionService } = await import('./transactionService');
         await transactionService.recalculateBalances();
+
+        // The deleted rules need to disappear from the UI immediately.
+        const { recurringService } = await import('./recurringService');
+        await recurringService.refresh();
     }
 }
 

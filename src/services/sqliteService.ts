@@ -5,6 +5,9 @@ import { NativeDbProvider } from './db/NativeDbProvider';
 import { WebDbProvider } from './db/WebDbProvider';
 import { seedCategoriesIfNeeded } from './db/seeder';
 
+// Bump this and add a matching `if (version < N)` block when the schema changes.
+const LATEST_SCHEMA_VERSION = 1;
+
 class SqliteService {
     private provider: IDbProvider | null = null;
     private isInitialized = false;
@@ -51,26 +54,57 @@ class SqliteService {
     }
 
     private async createSchemaInternal(db: SQLiteDBConnection) {
-        // This is specifically for native SQLite
-        const schema = this.getSchemaSql();
-        await db.execute(schema);
+        // This is specifically for native SQLite.
 
-        // Migrations for existing installs (CREATE TABLE IF NOT EXISTS won't add
-        // new columns). Each guarded — re-running on an up-to-date DB just throws
-        // "duplicate column name", which we ignore.
-        const migrations = [
-            'ALTER TABLE transactions ADD COLUMN receiptPath TEXT',
-            'ALTER TABLE transactions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
-            'ALTER TABLE categories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
-            'ALTER TABLE recurring_transactions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
-        ];
-        for (const sql of migrations) {
+        // 1. Ensure the base schema exists (no-op for existing installs).
+        await db.execute(this.getSchemaSql());
+
+        // 2. Apply versioned migrations for existing installs. Fresh installs
+        //    already get every column from getSchemaSql(), so ensureColumn()
+        //    confirms it exists and skips.
+        const version = await this.getSchemaVersion(db);
+
+        if (version < 1) {
+            // v1: columns added after the original schema shipped.
+            await this.ensureColumn(db, 'transactions', 'receiptPath', 'TEXT');
+            await this.ensureColumn(db, 'transactions', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
+            await this.ensureColumn(db, 'categories', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
+            await this.ensureColumn(db, 'recurring_transactions', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
+        }
+
+        // Future migrations: if (version < 2) { ...ensureColumn / ALTER / CREATE INDEX... }
+
+        // 3. Persist the new version. Non-fatal if it fails — every migration
+        //    above is idempotent, so it can safely re-run on the next launch.
+        if (version < LATEST_SCHEMA_VERSION) {
             try {
-                await db.execute(sql);
-            } catch {
-                // column already exists — ignore
+                await db.execute(`PRAGMA user_version = ${LATEST_SCHEMA_VERSION};`);
+            } catch (error) {
+                console.warn('SqliteService: could not persist schema version:', error);
             }
         }
+    }
+
+    private async getSchemaVersion(db: SQLiteDBConnection): Promise<number> {
+        try {
+            const result = await db.query('PRAGMA user_version;');
+            const row = result.values?.[0] as { user_version?: number } | undefined;
+            const version = Number(row?.user_version ?? 0);
+            return Number.isFinite(version) ? version : 0;
+        } catch (error) {
+            console.warn('SqliteService: could not read schema version:', error);
+            return 0;
+        }
+    }
+
+    private async hasColumn(db: SQLiteDBConnection, table: string, column: string): Promise<boolean> {
+        const result = await db.query(`PRAGMA table_info(${table});`);
+        return (result.values || []).some((row: any) => row.name === column);
+    }
+
+    private async ensureColumn(db: SQLiteDBConnection, table: string, column: string, definition: string) {
+        if (await this.hasColumn(db, table, column)) return;
+        await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
 
     private async createSchema() {

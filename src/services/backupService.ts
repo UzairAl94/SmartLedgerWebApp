@@ -5,10 +5,12 @@ import JSZip from 'jszip';
 import { accountService } from './accountService';
 import { transactionService } from './transactionService';
 import { categoryService } from './categoryService';
+import { budgetService } from './budgetService';
+import { recurringService } from './recurringService';
 import { settingsService } from './settingsService';
 import { sqliteService } from './sqliteService';
 import { receiptService } from './receiptService';
-import type { Account, Transaction, Category, UserSettings } from '../types';
+import type { Account, Transaction, Category, Budget, RecurringTransaction, UserSettings } from '../types';
 
 interface BackupData {
     version: number;
@@ -16,13 +18,18 @@ interface BackupData {
     accounts: Account[];
     transactions: Transaction[];
     categories: Category[];
+    budgets?: Budget[];
+    recurring?: RecurringTransaction[];
     settings: UserSettings | null;
 }
 
 // Re-seed all tables from a parsed backup payload. Shared by ZIP and legacy JSON restore.
 const restoreData = async (data: BackupData) => {
     await sqliteService.transaction(async (db) => {
+        // Delete children before parents (FKs are ON on native).
         await db.run('DELETE FROM transactions');
+        await db.run('DELETE FROM recurring_transactions');
+        await db.run('DELETE FROM budgets');
         await db.run('DELETE FROM accounts');
         await db.run('DELETE FROM categories');
         await db.run('DELETE FROM settings');
@@ -48,6 +55,20 @@ const restoreData = async (data: BackupData) => {
             );
         }
 
+        for (const budget of data.budgets || []) {
+            await db.execute(
+                'INSERT INTO budgets (id, categoryId, amount, currency, period) VALUES (?, ?, ?, ?, ?)',
+                [budget.id, budget.categoryId, budget.amount, budget.currency, budget.period]
+            );
+        }
+
+        for (const rule of data.recurring || []) {
+            await db.execute(
+                'INSERT INTO recurring_transactions (id, amount, currency, categoryId, accountId, toAccountId, note, type, fee, frequency, nextRunDate, active, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [rule.id, rule.amount, rule.currency, rule.categoryId || null, rule.accountId, rule.toAccountId || null, rule.note || null, rule.type, rule.fee || null, rule.frequency, rule.nextRunDate, rule.active, rule.hidden ? 1 : 0]
+            );
+        }
+
         if (data.settings) {
             await db.execute('INSERT INTO settings (key, value) VALUES (?, ?)', ['user_preferences', JSON.stringify(data.settings)]);
         }
@@ -66,11 +87,13 @@ const isWeb = () => Capacitor.getPlatform() === 'web';
 const buildBackupZip = async (): Promise<JSZip> => {
     const transactions = await transactionService.getAllTransactions();
     const data: BackupData = {
-        version: 2,
+        version: 3,
         timestamp: new Date().toISOString(),
         accounts: await accountService.getAllAccounts(),
         transactions,
         categories: await categoryService.getAllCategories(),
+        budgets: await budgetService.getAllBudgets(),
+        recurring: await recurringService.getAll(),
         settings: await settingsService.getSettings(),
     };
     const zip = new JSZip();
