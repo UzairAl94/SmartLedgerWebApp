@@ -22,6 +22,10 @@ const ENDPOINTS = [
     'GET|PATCH /api/settings',
     'GET /api/summary',
     'GET /api/balances',
+    'GET /api/reconcile?accountId=…',
+    'GET /api/audit',
+    'POST /api/audit/:id/undo',
+    'GET /api/diagnostics',
     'GET /api/export',
 ];
 

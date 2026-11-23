@@ -8,6 +8,8 @@ import { transactionService } from '../services/transactionService';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
 import { notificationService } from '../services/notificationService';
 import { biometricService } from '../services/biometricService';
+import { healthService } from '../services/healthService';
+import { auditService, type AuditEntry } from '../services/auditService';
 import { apiServer } from '../services/apiServer';
 import type { ApiServerState } from '../services/apiServer';
 import BottomSheet from '../components/ui/BottomSheet';
@@ -41,6 +43,57 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
     const [passphraseDraft, setPassphraseDraft] = useState('');
     const [pendingBackup, setPendingBackup] = useState<ArrayBuffer | null>(null);
     const [verifyLines, setVerifyLines] = useState<string[] | null>(null);
+    const [recentChanges, setRecentChanges] = useState<AuditEntry[]>([]);
+
+    const refreshRecentChanges = () => {
+        auditService.list(5).then(setRecentChanges).catch(() => {});
+    };
+
+    useEffect(() => {
+        refreshRecentChanges();
+    }, []);
+
+    const changeLabel = (entry: AuditEntry): string => {
+        if (entry.action === 'batch-create') return 'Imported a batch';
+        const payload = (entry.after || entry.before) as { amount?: number; currency?: string } | null;
+        const amount = payload && typeof payload.amount === 'number'
+            ? ` ${payload.amount.toLocaleString('en-US')} ${payload.currency || ''}`.trimEnd()
+            : '';
+        const verb = entry.action === 'create'
+            ? 'Added'
+            : entry.action === 'delete'
+                ? 'Deleted'
+                : entry.action === 'clear'
+                    ? 'Reconciled'
+                    : 'Edited';
+        return `${verb}${amount ? ` ${amount}` : ' a transaction'}`;
+    };
+
+    const handleUndoChange = async (id: string) => {
+        try {
+            await auditService.undo(id);
+            refreshRecentChanges();
+        } catch (error) {
+            alert('Undo failed: ' + (error instanceof Error ? error.message : String(error)));
+        }
+    };
+
+    const handleHealthCheck = async () => {
+        try {
+            const report = await healthService.runChecks();
+            if (report.issues.length === 0) {
+                alert(`No issues found across ${report.counts.transactions} transactions and ${report.counts.accounts} accounts.`);
+                return;
+            }
+            const errors = report.issues.filter(issue => issue.severity === 'error').length;
+            const warnings = report.issues.filter(issue => issue.severity === 'warning').length;
+            const preview = report.issues.slice(0, 5).map(issue => `• ${issue.message}`).join('\n');
+            const extra = report.issues.length > 5 ? `\n…and ${report.issues.length - 5} more` : '';
+            alert(`${errors} error(s), ${warnings} warning(s)\n\n${preview}${extra}`);
+        } catch (error) {
+            alert('Health check failed: ' + (error instanceof Error ? error.message : String(error)));
+        }
+    };
 
     useEffect(() => {
         biometricService.isAvailable().then(result => setBiometricAvailable(result.available)).catch(() => {});
@@ -1035,6 +1088,45 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             <span className="text-[12px] text-text-muted">Fix balance drift from transactions</span>
                         </div>
                     </button>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Data Health</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
+                    <button
+                        onClick={handleHealthCheck}
+                        className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5"
+                    >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-600">
+                            <Shield size={20} />
+                        </div>
+                        <div className="flex-1 text-left">
+                            <span className="block font-semibold text-[15px]">Run health check</span>
+                            <span className="text-[12px] text-text-muted">Duplicates, orphaned refs and balance drift</span>
+                        </div>
+                    </button>
+
+                    {recentChanges.length === 0 ? (
+                        <p className="p-4 text-[12px] text-text-muted">No recorded changes yet.</p>
+                    ) : recentChanges.map(entry => (
+                        <div key={entry.id} className="flex items-center gap-3 p-4 border-b border-black/5 last:border-0">
+                            <div className="flex-1">
+                                <span className="block text-[13px] font-semibold text-text-primary">{changeLabel(entry)}</span>
+                                <span className="text-[11px] text-text-muted">{new Date(entry.at).toLocaleString()}</span>
+                            </div>
+                            {entry.undoneAt ? (
+                                <span className="text-[12px] text-text-muted">Undone</span>
+                            ) : (
+                                <button
+                                    onClick={() => handleUndoChange(entry.id)}
+                                    className="px-3 py-2 rounded-lg bg-bg-primary text-[12px] font-bold text-primary active:scale-95"
+                                >
+                                    Undo
+                                </button>
+                            )}
+                        </div>
+                    ))}
                 </div>
             </section>
 

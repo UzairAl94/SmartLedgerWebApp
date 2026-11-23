@@ -60,6 +60,10 @@ add('PATCH', '/api/settings', handlers.updateSettings);
 
 add('GET', '/api/summary', handlers.summary);
 add('GET', '/api/balances', handlers.balances);
+add('GET', '/api/reconcile', handlers.reconcile);
+add('GET', '/api/audit', handlers.listAudit);
+add('POST', '/api/audit/:id/undo', handlers.undoAudit);
+add('GET', '/api/diagnostics', handlers.diagnostics);
 add('GET', '/api/export', handlers.exportData);
 
 export const routeRequest = async (

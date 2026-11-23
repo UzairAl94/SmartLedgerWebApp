@@ -292,6 +292,18 @@ class SqliteService {
                 active INTEGER NOT NULL DEFAULT 1,
                 hidden INTEGER NOT NULL DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id TEXT PRIMARY KEY,
+                at TEXT NOT NULL,
+                action TEXT NOT NULL,
+                entity TEXT NOT NULL,
+                entityId TEXT NOT NULL,
+                before TEXT,
+                after TEXT,
+                batchId TEXT,
+                undoneAt TEXT
+            );
         `;
     }
 

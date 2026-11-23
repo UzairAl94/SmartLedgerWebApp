@@ -86,6 +86,13 @@ const PATHS: Record<string, React.ReactNode> = {
     'chev-down': <path d="M6 9l6 6 6-6" />,
     'chev-double-left': <path d="M11 6l-6 6 6 6M18 6l-6 6 6 6" />,
     'chev-double-right': <path d="M13 6l6 6-6 6M6 6l6 6-6 6" />,
+    activity: <path d="M3 12h4l2.5-7 4 14 2.5-7H21" />,
+    shield: (
+        <>
+            <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+            <path d="M9 12l2 2 4-4" />
+        </>
+    ),
     inbox: (
         <>
             <path d="M4 13h4l1.5 2.5h5L16 13h4" />

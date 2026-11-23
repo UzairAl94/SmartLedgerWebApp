@@ -78,6 +78,10 @@ read/write access — treat it as a password.
 | GET/PATCH | `/api/settings` | preferences (PIN is refused) |
 | GET | `/api/summary` | totals + breakdowns |
 | GET | `/api/balances` | net worth + per-account |
+| GET | `/api/reconcile?accountId=…` | ledger vs cleared balance for an account |
+| GET | `/api/audit` | recent transaction changes (before/after) |
+| POST | `/api/audit/:id/undo` | apply the inverse of a recorded change |
+| GET | `/api/diagnostics` | duplicate/orphan/drift health report |
 | GET | `/api/export` | full ledger JSON |
 
 ### Transaction item
@@ -97,6 +101,11 @@ read/write access — treat it as a password.
 
 `account`/`category` accept names or `accountId`/`categoryId`. `currency` defaults to the
 account's currency. Transfers need `toAccount` and no category.
+
+Rows also carry the conversion frozen at write time (`accountAmount`, `accountFee`,
+`toAccountAmount`, `baseAmount`, `baseCurrency`, `fxRate`) and a `cleared` flag. Send
+`PATCH /api/transactions/:id` with only `{"cleared": true}` to reconcile a row without
+re-freezing its conversion.
 
 ### Bulk import
 

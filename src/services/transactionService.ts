@@ -3,14 +3,15 @@ import { accountService } from './accountService';
 import { settingsService } from './settingsService';
 import { receiptService } from './receiptService';
 import { accountDeltas, computeAmounts } from './ledgerMath';
+import { recordAudit } from './auditLog';
 import type { Transaction, Account } from '../types';
 
 type Listener = (transactions: Transaction[]) => void;
 
 const INSERT_COLUMNS = `id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee,
     receiptPath, hidden, externalId, importBatchId,
-    accountAmount, accountFee, toAccountAmount, baseAmount, baseCurrency, fxRate`;
-const INSERT_PLACEHOLDERS = '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?';
+    accountAmount, accountFee, toAccountAmount, baseAmount, baseCurrency, fxRate, cleared`;
+const INSERT_PLACEHOLDERS = '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?';
 
 class TransactionService {
     private listeners: Listener[] = [];
@@ -94,6 +95,7 @@ class TransactionService {
             amounts.baseAmount,
             amounts.baseCurrency,
             amounts.fxRate,
+            tx.cleared ? 1 : 0,
         ];
     }
 
@@ -118,6 +120,7 @@ class TransactionService {
             `INSERT INTO transactions (${INSERT_COLUMNS}) VALUES (${INSERT_PLACEHOLDERS})`,
             this.insertValues(id, tx, amounts)
         );
+        await recordAudit({ action: 'create', entityId: id, after: { ...tx, id } });
 
         if (options.recalculate !== false) {
             await this.recalculateBalances();
@@ -155,6 +158,14 @@ class TransactionService {
         });
 
         await this.recalculateBalances();
+        const batchId = txs.find(tx => tx.importBatchId)?.importBatchId;
+        await recordAudit({
+            action: 'batch-create',
+            entity: 'import',
+            entityId: batchId || prepared[0]?.id || 'batch',
+            batchId,
+            after: { count: prepared.length, ids: prepared.map(row => row.id) },
+        });
         return prepared.map(row => row.id);
     }
 
@@ -162,6 +173,7 @@ class TransactionService {
     async deleteTransaction(tx: Transaction) {
         await sqliteService.execute('DELETE FROM transactions WHERE id = ?', [tx.id]);
         await receiptService.remove(tx.receiptPath);
+        await recordAudit({ action: 'delete', entityId: tx.id, before: tx });
         await this.recalculateBalances();
     }
 
@@ -205,7 +217,8 @@ class TransactionService {
             `UPDATE transactions SET
                 amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?,
                 note = ?, type = ?, fee = ?, receiptPath = ?, hidden = ?,
-                accountAmount = ?, accountFee = ?, toAccountAmount = ?, baseAmount = ?, baseCurrency = ?, fxRate = ?
+                accountAmount = ?, accountFee = ?, toAccountAmount = ?, baseAmount = ?, baseCurrency = ?, fxRate = ?,
+                cleared = ?
              WHERE id = ?`,
             [
                 newTxData.amount,
@@ -225,15 +238,60 @@ class TransactionService {
                 amounts.baseAmount,
                 amounts.baseCurrency,
                 amounts.fxRate,
+                newTxData.cleared ?? oldTx.cleared ?? 0,
                 oldTx.id,
             ]
         );
+
+        await recordAudit({
+            action: 'update',
+            entityId: oldTx.id,
+            before: oldTx,
+            after: { ...newTxData, id: oldTx.id },
+        });
 
         // If the receipt changed or was removed, delete the old file (no orphans).
         if (oldTx.receiptPath && oldTx.receiptPath !== newTxData.receiptPath) {
             await receiptService.remove(oldTx.receiptPath);
         }
 
+        await this.recalculateBalances();
+    }
+
+    // Mark rows reconciled/cleared. Does not move balances, so no recalculation.
+    async setCleared(ids: string[], value: 0 | 1, options: { audit?: boolean } = {}): Promise<number> {
+        let changed = 0;
+        for (const id of ids) {
+            const before = await this.getTransactionById(id);
+            if (!before) continue;
+            if ((before.cleared ?? 0) === value) continue;
+
+            await sqliteService.execute('UPDATE transactions SET cleared = ? WHERE id = ?', [value, id]);
+            if (options.audit !== false) {
+                await recordAudit({ action: 'clear', entityId: id, before, after: { ...before, cleared: value } });
+            }
+            changed++;
+        }
+        if (changed > 0) await this.fetchAndNotify();
+        return changed;
+    }
+
+    // Re-insert an exact row, used by audit undo. No audit entry is produced.
+    async restoreTransaction(tx: Transaction): Promise<void> {
+        await sqliteService.transaction(async (db) => {
+            await db.run('DELETE FROM transactions WHERE id = ?', [tx.id]);
+            await db.run(
+                `INSERT INTO transactions (${INSERT_COLUMNS}) VALUES (${INSERT_PLACEHOLDERS})`,
+                [
+                    tx.id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null,
+                    tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null,
+                    tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null,
+                    tx.accountAmount ?? null, tx.accountFee ?? null, tx.toAccountAmount ?? null,
+                    tx.baseAmount ?? null, tx.baseCurrency || null, tx.fxRate ?? null,
+                    tx.cleared ? 1 : 0,
+                ]
+            );
+        });
         await this.recalculateBalances();
     }
 

@@ -1,11 +1,14 @@
 import type { Account, Budget, Category, Currency, RecurringTransaction, UserSettings } from '../../types';
 import type {
     ApiLogEntry,
+    AuditEntryView,
     BalancesResponse,
     Connection,
     ExportedLedger,
+    HealthReport,
     HealthResponse,
     ImportBatch,
+    ReconcileState,
     SafeSettings,
     SummaryData,
     TransactionFilters,
@@ -207,6 +210,30 @@ export const createClient = (connection: Connection) => ({
 
     async balances(currency: Currency): Promise<BalancesResponse> {
         return request<BalancesResponse>(connection, `/api/balances${toQuery({ currency })}`);
+    },
+
+    async reconcile(accountId: string): Promise<ReconcileState> {
+        return request<ReconcileState>(connection, `/api/reconcile${toQuery({ accountId })}`);
+    },
+
+    async setCleared(id: string, cleared: boolean): Promise<void> {
+        await request(connection, `/api/transactions/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ cleared }),
+        });
+    },
+
+    async audit(limit = 100): Promise<AuditEntryView[]> {
+        const data = await request<{ entries: AuditEntryView[] }>(connection, `/api/audit${toQuery({ limit })}`);
+        return data.entries || [];
+    },
+
+    async undoAudit(id: string): Promise<void> {
+        await request(connection, `/api/audit/${encodeURIComponent(id)}/undo`, { method: 'POST' });
+    },
+
+    async diagnostics(): Promise<HealthReport> {
+        return request<HealthReport>(connection, '/api/diagnostics');
     },
 
     async exportLedger(): Promise<ExportedLedger> {

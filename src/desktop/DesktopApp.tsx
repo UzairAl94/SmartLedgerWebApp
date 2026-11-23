@@ -8,6 +8,9 @@ import { AccountsView } from './views/Accounts';
 import { BudgetsView } from './views/Budgets';
 import { RecurringView } from './views/Recurring';
 import { ImportsView } from './views/Imports';
+import { ReconcileView } from './views/Reconcile';
+import { ActivityView } from './views/Activity';
+import { DiagnosticsView } from './views/Diagnostics';
 import { ApiView } from './views/Api';
 import { SettingsView } from './views/Settings';
 import { Card, Empty, Icon, SkeletonPage } from './ui';
@@ -205,6 +208,12 @@ export const DesktopApp = () => {
                 );
             case 'imports':
                 return <ImportsView store={store} onUndo={batchId => confirmDelete('import', batchId, 'Undo import')} />;
+            case 'reconcile':
+                return <ReconcileView store={store} />;
+            case 'activity':
+                return <ActivityView store={store} />;
+            case 'diagnostics':
+                return <DiagnosticsView store={store} />;
             case 'api':
                 return (
                     <ApiView

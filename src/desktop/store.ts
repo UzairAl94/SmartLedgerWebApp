@@ -4,12 +4,15 @@ import { createClient, type LedgerClient } from './api/client';
 import { convert, isoDay, rangeBounds } from './format';
 import type {
     ApiLogEntry,
+    AuditEntryView,
     BalancesResponse,
     Connection,
+    HealthReport,
     HealthResponse,
     ImportBatch,
     PageKey,
     RangeKey,
+    ReconcileState,
     SafeSettings,
     SummaryData,
     ToastMessage,
@@ -91,6 +94,12 @@ export interface DesktopStore {
     filters: TransactionFilters;
     range: RangeKey;
     api: { health: HealthResponse | null; logs: ApiLogEntry[]; latency: number | null };
+    reconcile: ReconcileState | null;
+    reconcileRows: TransactionView[];
+    reconcileAccountId: string;
+    setReconcileAccount: (accountId: string) => void;
+    audit: AuditEntryView[];
+    diagnostics: HealthReport | null;
 
     loading: boolean;
     error: string | null;
@@ -125,6 +134,11 @@ export function useDesktopStore(): DesktopStore {
     const [filters, setFiltersState] = useState<TransactionFilters>(DEFAULT_FILTERS);
     const [offset, setOffset] = useState(0);
     const [api, setApi] = useState<DesktopStore['api']>({ health: null, logs: [], latency: null });
+    const [reconcile, setReconcile] = useState<ReconcileState | null>(null);
+    const [reconcileRows, setReconcileRows] = useState<TransactionView[]>([]);
+    const [reconcileAccountId, setReconcileAccountId] = useState('');
+    const [audit, setAudit] = useState<AuditEntryView[]>([]);
+    const [diagnostics, setDiagnostics] = useState<HealthReport | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -206,6 +220,21 @@ export function useDesktopStore(): DesktopStore {
                 const data = await client.listTransactions(filters, PAGE_SIZE, offset);
                 setTransactions(data.transactions);
                 setTransactionTotal(data.total);
+            } else if (page === 'reconcile') {
+                const accountId = reconcileAccountId || nextAccounts[0]?.id || '';
+                if (accountId) {
+                    const [state, rows] = await Promise.all([
+                        client.reconcile(accountId),
+                        client.listTransactions({ accountId }, 200, 0),
+                    ]);
+                    setReconcile(state);
+                    setReconcileRows(rows.transactions);
+                    if (!reconcileAccountId) setReconcileAccountId(accountId);
+                }
+            } else if (page === 'activity') {
+                setAudit(await client.audit(100));
+            } else if (page === 'diagnostics') {
+                setDiagnostics(await client.diagnostics());
             } else if (page === 'budgets') {
                 const now = new Date();
                 const [nextBudgets, spend] = await Promise.all([
@@ -237,7 +266,7 @@ export function useDesktopStore(): DesktopStore {
         } finally {
             setLoading(false);
         }
-    }, [client, page, filters, offset, range]);
+    }, [client, page, filters, offset, range, reconcileAccountId]);
 
     // Declarative load: any change to the client, page, or its inputs refetches.
     useEffect(() => {
@@ -268,6 +297,12 @@ export function useDesktopStore(): DesktopStore {
         filters,
         range,
         api,
+        reconcile,
+        reconcileRows,
+        reconcileAccountId,
+        setReconcileAccount: setReconcileAccountId,
+        audit,
+        diagnostics,
         loading,
         error,
         setFilters: patch => {

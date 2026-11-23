@@ -6,6 +6,7 @@ import type { DesktopStore } from './store';
 const NAV: Array<{ page: PageKey; icon: string; label: string }> = [
     { page: 'dashboard', icon: 'grid', label: 'Overview' },
     { page: 'transactions', icon: 'list', label: 'Transactions' },
+    { page: 'reconcile', icon: 'check', label: 'Reconcile' },
     { page: 'accounts', icon: 'wallet', label: 'Accounts' },
     { page: 'budgets', icon: 'target', label: 'Budgets' },
     { page: 'recurring', icon: 'repeat', label: 'Recurring' },
@@ -13,6 +14,8 @@ const NAV: Array<{ page: PageKey; icon: string; label: string }> = [
 ];
 
 const TOOLS: Array<{ page: PageKey; icon: string; label: string }> = [
+    { page: 'activity', icon: 'activity', label: 'Activity' },
+    { page: 'diagnostics', icon: 'shield', label: 'Data health' },
     { page: 'api', icon: 'plug', label: 'API & Sync' },
     { page: 'settings', icon: 'gear', label: 'Settings' },
 ];

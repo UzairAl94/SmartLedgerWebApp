@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '../../utils/format';
 import { isAmountHidden, MASK } from '../../utils/visibility';
 import { receiptService } from '../../services/receiptService';
+import { transactionService } from '../../services/transactionService';
 import BottomSheet from '../ui/BottomSheet';
 import type { Transaction, Category, Account } from '../../types';
 
@@ -19,9 +20,22 @@ const TransactionDetails: React.FC<TransactionDetailsProps> = ({ tx, categories,
     const [lightbox, setLightbox] = useState<string | null>(null);
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
+    const [clearedOverride, setClearedOverride] = useState<{ id: string; cleared: boolean } | null>(null);
+    const cleared = tx && clearedOverride?.id === tx.id ? clearedOverride.cleared : tx?.cleared === 1;
 
     // Reset reveal each time a different transaction opens.
     useEffect(() => { setReveal(false); }, [tx]);
+
+    const toggleCleared = async (value: boolean) => {
+        if (!tx) return;
+        setClearedOverride({ id: tx.id, cleared: value });
+        try {
+            await transactionService.setCleared([tx.id], value ? 1 : 0);
+        } catch (error) {
+            setClearedOverride(null);
+            alert('Could not update reconciliation: ' + (error instanceof Error ? error.message : String(error)));
+        }
+    };
 
     useEffect(() => {
         if (!tx?.receiptPath) { setReceiptSrc(null); return; }
@@ -69,6 +83,21 @@ const TransactionDetails: React.FC<TransactionDetailsProps> = ({ tx, categories,
                             <Row label="Date" value={format(parseISO(tx.date), 'EEE, dd MMM yyyy')} />
                             {tx.fee ? <Row label="Fee" value={formatCurrency(tx.fee, tx.currency)} /> : null}
                             {tx.note ? <Row label="Note" value={tx.note} /> : null}
+                            <div className="flex items-center justify-between py-3 border-t border-black/5">
+                                <div>
+                                    <span className="block text-[13px] font-medium text-text-muted">Reconciled</span>
+                                    <span className="text-[11px] text-text-muted">Matches your statement</span>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={cleared}
+                                        onChange={(e) => toggleCleared(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
                         </div>
 
                         {tx.receiptPath && (

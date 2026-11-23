@@ -78,7 +78,8 @@ Each domain service is a singleton with an **observer pattern**: `subscribeToX(c
 5. `fetchAndNotify` is public on the service singletons and is called directly by other services after batch writes.
 6. Recent-transactions subscription is capped at **50** (`getRecentTransactions`). Anything needing more must call `getAllTransactions`.
 7. Category delete sets `categoryId` NULL on transactions (FK `ON DELETE SET NULL`); account delete cascades + manual cleanup in `deleteAccount` for old DBs without cascade.
-8. `scripts/seedCategories.js` is a standalone script; runtime seeding is `services/db/seeder.ts` (runs once, guarded by `settings.categories_seeded`).
+8. **NanoHTTPD does not parse PATCH bodies.** `ApiServerPlugin` reads the request stream itself for anything that is not POST/PUT; without that, every PATCH body arrives empty and silently no-ops.
+9. `scripts/seedCategories.js` is a standalone script; runtime seeding is `services/db/seeder.ts` (runs once, guarded by `settings.categories_seeded`).
 
 ## Where things are
 - App entry/state/routing: `src/App.tsx`

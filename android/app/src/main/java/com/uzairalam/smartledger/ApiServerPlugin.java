@@ -203,9 +203,19 @@ public class ApiServerPlugin extends Plugin {
 
         String body = "";
         try {
-            Map<String, String> files = new HashMap<>();
-            session.parseBody(files);
-            body = files.get("postData");
+            // NanoHTTPD 2.3.1 only handles POST/PUT in parseBody and throws for
+            // other methods. Read PATCH (and anything else with a body) directly.
+            boolean parseWithNano = NanoHTTPD.Method.POST.equals(session.getMethod())
+                || NanoHTTPD.Method.PUT.equals(session.getMethod());
+
+            if (parseWithNano) {
+                Map<String, String> files = new HashMap<>();
+                session.parseBody(files);
+                body = files.get("postData");
+            }
+            if (body == null || body.isEmpty()) {
+                body = readBodyFromStream(session);
+            }
             if (body == null) body = "";
             if (body.getBytes(StandardCharsets.UTF_8).length > MAX_BODY_BYTES) {
                 return withCors(jsonError(413, "Request body too large"));
@@ -291,6 +301,30 @@ public class ApiServerPlugin extends Plugin {
             a.getBytes(StandardCharsets.UTF_8),
             b.getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private String readBodyFromStream(NanoHTTPD.IHTTPSession session) throws IOException {
+        String contentLength = session.getHeaders().get("content-length");
+        if (contentLength == null) return "";
+
+        int length;
+        try {
+            length = Integer.parseInt(contentLength.trim());
+        } catch (NumberFormatException error) {
+            return "";
+        }
+        if (length <= 0) return "";
+        if (length > MAX_BODY_BYTES) return "";
+
+        byte[] buffer = new byte[length];
+        int read = 0;
+        InputStream input = session.getInputStream();
+        while (read < length) {
+            int next = input.read(buffer, read, length - read);
+            if (next <= 0) break;
+            read += next;
+        }
+        return new String(buffer, 0, read, StandardCharsets.UTF_8);
     }
 
     private NanoHTTPD.Response serveStatic(NanoHTTPD.IHTTPSession session) {

@@ -5,6 +5,9 @@ import { budgetService } from '../budgetService';
 import { recurringService } from '../recurringService';
 import { settingsService } from '../settingsService';
 import { analyticsService } from '../analyticsService';
+import { reconcileService } from '../reconcileService';
+import { auditService } from '../auditService';
+import { healthService } from '../healthService';
 import { ApiServer } from './plugin';
 import { getLogEntries } from './log';
 import {
@@ -190,6 +193,10 @@ export const endpointCatalog: Handler = async () =>
             'GET|PATCH /api/settings',
             'GET /api/summary',
             'GET /api/balances',
+            'GET /api/reconcile?accountId=…',
+            'GET /api/audit',
+            'POST /api/audit/:id/undo',
+            'GET /api/diagnostics',
             'GET /api/export',
         ],
     });
@@ -327,6 +334,7 @@ export const listTransactions: Handler = async ({ query }) => {
     const accountId = query.get('accountId');
     const categoryId = query.get('categoryId');
     const batchId = query.get('batchId');
+    const clearedRaw = query.get('cleared');
     const search = query.get('q')?.toLowerCase();
     const typeRaw = query.get('type')?.toLowerCase();
     const typeMap: Record<string, string> = { income: 'Income', expense: 'Expense', transfer: 'Transfer' };
@@ -346,6 +354,8 @@ export const listTransactions: Handler = async ({ query }) => {
         if (accountId && tx.accountId !== accountId && tx.toAccountId !== accountId) return false;
         if (categoryId && tx.categoryId !== categoryId) return false;
         if (batchId && tx.importBatchId !== batchId) return false;
+        if (clearedRaw === '1' && tx.cleared !== 1) return false;
+        if (clearedRaw === '0' && tx.cleared === 1) return false;
         if (type && tx.type !== type) return false;
         if (search) {
             const haystack = [
@@ -407,6 +417,21 @@ export const updateTransaction: Handler = async ({ params, body }) => {
 
     const { accounts, categories, settings } = await loadContext();
     const raw = bodyRecord(body);
+
+    // Toggling reconciliation must not re-freeze the row's conversion.
+    if (raw.cleared !== undefined && Object.keys(raw).length === 1) {
+        await transactionService.setCleared([old.id], asBoolean(raw.cleared) ? 1 : 0);
+        const updated = await transactionService.getTransactionById(old.id);
+        if (!updated) throw new ApiError(500, 'Transaction was updated but could not be read back.');
+        return json({
+            transaction: transactionView(
+                updated,
+                new Map(accounts.map(account => [account.id, account])),
+                new Map(categories.map(category => [category.id, category]))
+            ),
+        });
+    }
+
     const base: Record<string, unknown> = {
         date: old.date,
         type: old.type,
@@ -850,6 +875,37 @@ export const balances: Handler = async ({ query }) => {
     const currency = currencyRaw ? normalizeCurrency(currencyRaw, settings.mainCurrency) : undefined;
     return json(analyticsService.computeBalances(accounts, settings, currency));
 };
+
+// ---------------------------------------------------------------------------
+// Reconciliation, audit trail, diagnostics
+// ---------------------------------------------------------------------------
+
+export const reconcile: Handler = async ({ query }) => {
+    const accountId = query.get('accountId');
+    if (!accountId) throw new ApiError(400, 'accountId is required.');
+    try {
+        return json(await reconcileService.getState(accountId));
+    } catch (error) {
+        throw new ApiError(404, error instanceof Error ? error.message : 'Account not found.');
+    }
+};
+
+export const listAudit: Handler = async ({ query }) => {
+    const limitRaw = Number(query.get('limit') ?? 50);
+    const limit = Math.min(Math.max(Math.floor(Number.isFinite(limitRaw) ? limitRaw : 50), 1), 200);
+    return json({ entries: await auditService.list(limit) });
+};
+
+export const undoAudit: Handler = async ({ params }) => {
+    try {
+        await auditService.undo(params.id);
+        return json({ undone: true, id: params.id });
+    } catch (error) {
+        throw new ApiError(400, error instanceof Error ? error.message : 'Could not undo this change.');
+    }
+};
+
+export const diagnostics: Handler = async () => json(await healthService.runChecks());
 
 export const exportData: Handler = async () => {
     const [transactions, accounts, categories, budgets, recurring, settings] = await Promise.all([

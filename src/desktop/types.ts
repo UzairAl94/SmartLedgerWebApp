@@ -93,7 +93,18 @@ export interface TransactionFilters {
 
 export type RangeKey = 'this-month' | 'last-month' | '3m' | '6m' | 'ytd' | 'all';
 
-export type PageKey = 'dashboard' | 'transactions' | 'accounts' | 'budgets' | 'recurring' | 'imports' | 'api' | 'settings';
+export type PageKey =
+    | 'dashboard'
+    | 'transactions'
+    | 'reconcile'
+    | 'accounts'
+    | 'budgets'
+    | 'recurring'
+    | 'imports'
+    | 'activity'
+    | 'diagnostics'
+    | 'api'
+    | 'settings';
 
 export type ModalState =
     | { kind: 'tx'; tx: TransactionView | null }
@@ -127,10 +138,53 @@ export const RANGE_OPTIONS: Array<[RangeKey, string]> = [
 export const PAGE_META: Record<PageKey, [string, string]> = {
     dashboard: ['Overview', 'Your money at a glance'],
     transactions: ['Transactions', 'Every entry in the ledger'],
+    reconcile: ['Reconcile', 'Match cleared rows to a statement'],
     accounts: ['Accounts', 'Where the money sits'],
     budgets: ['Budgets', 'Monthly limits per category'],
     recurring: ['Recurring', 'Rules that create entries automatically'],
     imports: ['Imports', 'Batches written through the API'],
+    activity: ['Activity', 'Recent changes, with undo'],
+    diagnostics: ['Data health', 'Integrity checks across the ledger'],
     api: ['API & Sync', 'The phone server this page talks to'],
     settings: ['Settings', 'Preferences shared with the mobile app'],
 };
+
+export interface ReconcileState {
+    accountId: string;
+    accountName: string;
+    currency: Account['currency'];
+    ledgerBalance: number;
+    clearedBalance: number;
+    unclearedCount: number;
+    unclearedDelta: number;
+}
+
+export interface AuditEntryView {
+    id: string;
+    at: string;
+    action: 'create' | 'update' | 'delete' | 'clear' | 'batch-create';
+    entity: 'transaction' | 'import';
+    entityId: string;
+    before: unknown;
+    after: unknown;
+    batchId: string | null;
+    undoneAt: string | null;
+}
+
+export interface HealthIssue {
+    code: string;
+    severity: 'error' | 'warning';
+    message: string;
+    entityId?: string;
+}
+
+export interface HealthReport {
+    checkedAt: string;
+    counts: {
+        accounts: number;
+        transactions: number;
+        categories: number;
+        budgets: number;
+    };
+    issues: HealthIssue[];
+}
