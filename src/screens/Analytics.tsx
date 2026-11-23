@@ -4,22 +4,17 @@ import { Calendar, ChevronDown } from 'lucide-react';
 import type { Transaction, Category, UserSettings } from '../types';
 import { formatCurrency } from '../utils/format';
 import { convert } from '../utils/money';
+import { DEFAULT_TIMEFRAME, TIMEFRAME_OPTIONS, timeframeBounds, type Timeframe } from '../utils/timeframes';
 import { transactionService } from '../services/transactionService';
 import {
-    subDays,
-    startOfMonth,
-    endOfMonth,
     format,
     isAfter,
     isBefore,
     parseISO,
     eachDayOfInterval,
-    subMonths,
     isSameDay,
     startOfDay,
     endOfDay,
-    startOfYear,
-    endOfYear,
     eachMonthOfInterval,
     isSameMonth
 } from 'date-fns';
@@ -29,10 +24,8 @@ interface AnalyticsProps {
     settings: UserSettings | null;
 }
 
-type DateRange = '7days' | '30days' | 'thisMonth' | 'lastMonth' | '6Months' | 'Year';
-
 const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
-    const [dateRange, setDateRange] = useState<DateRange>('7days');
+    const [dateRange, setDateRange] = useState<Timeframe>(DEFAULT_TIMEFRAME);
     const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // Analytics must operate on ALL transactions, not the 50-capped subscription list.
@@ -46,26 +39,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
     }, []);
 
     // 1. Determine Date Range Metadata
-    const { startDate, endDate, periodType } = useMemo(() => {
-        const now = new Date();
-        switch (dateRange) {
-            case '7days':
-                return { startDate: subDays(now, 6), endDate: now, periodType: 'daily' };
-            case '30days':
-                return { startDate: subDays(now, 29), endDate: now, periodType: 'daily' };
-            case 'thisMonth':
-                return { startDate: startOfMonth(now), endDate: endOfMonth(now), periodType: 'daily' };
-            case 'lastMonth':
-                const lastMonth = subMonths(now, 1);
-                return { startDate: startOfMonth(lastMonth), endDate: endOfMonth(lastMonth), periodType: 'daily' };
-            case '6Months':
-                return { startDate: subMonths(now, 5), endDate: endOfMonth(now), periodType: 'monthly' };
-            case 'Year':
-                return { startDate: startOfYear(now), endDate: endOfYear(now), periodType: 'monthly' };
-            default:
-                return { startDate: subDays(now, 6), endDate: now, periodType: 'daily' };
-        }
-    }, [dateRange]);
+    const { start: startDate, end: endDate, periodType } = useMemo(() => timeframeBounds(dateRange), [dateRange]);
 
     // 2. Filter Transactions
     const filteredTransactions = useMemo(() => {
@@ -156,15 +130,12 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
                 <div className="relative group z-20">
                     <select
                         value={dateRange}
-                        onChange={(e) => setDateRange(e.target.value as DateRange)}
+                        onChange={(e) => setDateRange(e.target.value as Timeframe)}
                         className="appearance-none bg-white border border-black/5 pl-9 pr-8 py-2 rounded-xl text-[13px] font-bold text-text-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
                     >
-                        <option value="7days">Last 7 Days</option>
-                        <option value="30days">Last 30 Days</option>
-                        <option value="thisMonth">This Month</option>
-                        <option value="lastMonth">Last Month</option>
-                        <option value="6Months">Last 6 Months</option>
-                        <option value="Year">This Year</option>
+                        {TIMEFRAME_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
                     </select>
                     <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none" />
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />

@@ -245,7 +245,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* From Account Logic - Always Shown */}
-                <div className="flex flex-col gap-2 order-2 md:order-1">
+                <div className="flex flex-col gap-2">
                     <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest px-1">
                         {type === 'Transfer' ? 'From Account' : 'Account'}
                     </label>
@@ -262,7 +262,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
 
                 {/* Second Field: Category OR To Account */}
                 {type === 'Transfer' ? (
-                    <div className="flex flex-col gap-2 order-1 md:order-2">
+                    <div className="flex flex-col gap-2">
                         <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest px-1">To Account</label>
                         <select
                             className="bg-white border border-black/5 p-4 rounded-2xl text-[14px] font-semibold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer"
@@ -276,7 +276,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSuccess, accounts, 
                         </select>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-2 order-1 md:order-2">
+                    <div className="flex flex-col gap-2">
                         <label className="text-[12px] font-bold text-text-muted uppercase tracking-widest px-1">Category</label>
                         <select
                             className="bg-white border border-black/5 p-4 rounded-2xl text-[14px] font-semibold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer"
