@@ -77,9 +77,20 @@ export interface RecurringTransaction {
 
 export type ConversionRates = Record<string, number>;
 
+export interface PayPeriod {
+  id: string;
+  startDate: string; // YYYY-MM-DD, inclusive
+  endDate?: string | null; // YYYY-MM-DD, inclusive; null/undefined = current (open)
+  source: 'detected' | 'manual';
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface UserSettings {
   mainCurrency: Currency;
   monthStartDay: number;
+  salaryCategoryIds?: string[]; // income categories that mark a pay-cycle boundary
   useCustomRates: boolean;
   customRates: ConversionRates;
   appLockEnabled: boolean;

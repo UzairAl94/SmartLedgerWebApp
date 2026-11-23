@@ -5,6 +5,8 @@ import { budgetService } from '../services/budgetService';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
 import { convert } from '../utils/money';
+import { coversDay, toDay } from '../services/payPeriodMath';
+import { usePayPeriods } from '../hooks/usePayPeriods';
 import BottomSheet from '../components/ui/BottomSheet';
 import type { Budget, Category, Transaction, UserSettings, Currency } from '../types';
 
@@ -26,14 +28,16 @@ const Budgets: React.FC<BudgetsProps> = ({ budgets, categories, settings }) => {
         return unsub;
     }, []);
 
-    // Start of the current budget period, respecting monthStartDay.
+    // Budgets reset with the stored salary cycle when one exists.
+    const { current: currentCycle } = usePayPeriods();
     const periodStart = useMemo(() => {
+        if (currentCycle) return startOfDay(parseISO(currentCycle.startDate));
         const now = new Date();
         const day = settings?.monthStartDay || 1;
         let start = startOfDay(setDate(now, day));
         if (isAfter(start, now)) start = subMonths(start, 1);
         return start;
-    }, [settings?.monthStartDay]);
+    }, [currentCycle, settings?.monthStartDay]);
 
     const expenseCategories = categories.filter(c => c.type === 'Expense');
     const budgetedCategoryIds = new Set(budgets.map(b => b.categoryId));
@@ -42,7 +46,7 @@ const Budgets: React.FC<BudgetsProps> = ({ budgets, categories, settings }) => {
         const category = categories.find(c => c.id === budget.categoryId);
         const spent = transactions
             .filter(t => t.type === 'Expense' && t.categoryId === budget.categoryId)
-            .filter(t => isAfter(parseISO(t.date), periodStart))
+            .filter(t => currentCycle ? coversDay(currentCycle, toDay(t.date)) : isAfter(parseISO(t.date), periodStart))
             .reduce((sum, t) => sum + convert(t.amount, t.currency, budget.currency, settings), 0);
         const pct = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
         return { budget, category, spent, pct, over: spent > budget.amount };

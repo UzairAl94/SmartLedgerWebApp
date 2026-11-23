@@ -82,6 +82,11 @@ read/write access — treat it as a password.
 | GET | `/api/audit` | recent transaction changes (before/after) |
 | POST | `/api/audit/:id/undo` | apply the inverse of a recorded change |
 | GET | `/api/diagnostics` | duplicate/orphan/drift health report |
+| GET | `/api/periods` | stored pay cycles with income/expense/salary totals |
+| GET | `/api/periods/proposals` | salary-derived cycle proposals |
+| POST | `/api/periods` | add a cycle manually |
+| POST | `/api/periods/apply` | create approved proposals |
+| PATCH/DELETE | `/api/periods/:id` | adjust or remove a cycle |
 | GET | `/api/export` | full ledger JSON |
 
 ### Transaction item

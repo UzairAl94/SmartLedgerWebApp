@@ -8,6 +8,7 @@ import { analyticsService } from '../analyticsService';
 import { reconcileService } from '../reconcileService';
 import { auditService } from '../auditService';
 import { healthService } from '../healthService';
+import { periodService } from '../periodService';
 import { ApiServer } from './plugin';
 import { getLogEntries } from './log';
 import {
@@ -197,6 +198,11 @@ export const endpointCatalog: Handler = async () =>
             'GET /api/audit',
             'POST /api/audit/:id/undo',
             'GET /api/diagnostics',
+            'GET /api/periods',
+            'GET /api/periods/proposals',
+            'POST /api/periods',
+            'POST /api/periods/apply',
+            'PATCH|DELETE /api/periods/:id',
             'GET /api/export',
         ],
     });
@@ -783,6 +789,12 @@ export const updateSettings: Handler = async ({ body }) => {
         if (day === null || day < 1 || day > 28) throw new ApiError(400, 'monthStartDay must be between 1 and 28.');
         patch.monthStartDay = Math.round(day);
     }
+    if (raw.salaryCategoryIds !== undefined) {
+        if (!Array.isArray(raw.salaryCategoryIds) || raw.salaryCategoryIds.some(value => typeof value !== 'string')) {
+            throw new ApiError(400, 'salaryCategoryIds must be an array of category ids.');
+        }
+        patch.salaryCategoryIds = (raw.salaryCategoryIds as string[]).filter(Boolean);
+    }
     if (raw.useCustomRates !== undefined) {
         patch.useCustomRates = asBoolean(raw.useCustomRates);
     }
@@ -854,13 +866,27 @@ export const summary: Handler = async ({ query }) => {
     const currency = currencyRaw ? normalizeCurrency(currencyRaw, settings.mainCurrency) : undefined;
     const groupBy = query.get('groupBy') === 'day' ? 'day' : 'month';
 
+    // period=current|previous resolves to a stored pay cycle when one exists.
+    let from = query.get('from') || undefined;
+    let to = query.get('to') || undefined;
+    const periodKey = query.get('period');
+    if (periodKey === 'current' || periodKey === 'previous') {
+        const period = periodKey === 'current'
+            ? await periodService.current()
+            : await periodService.previous();
+        if (period) {
+            from = period.startDate;
+            to = period.endDate || undefined;
+        }
+    }
+
     return json(analyticsService.summarize({
         transactions,
         accounts,
         categories,
         settings,
-        from: query.get('from') || undefined,
-        to: query.get('to') || undefined,
+        from,
+        to,
         currency,
         groupBy,
     }));
@@ -906,6 +932,70 @@ export const undoAudit: Handler = async ({ params }) => {
 };
 
 export const diagnostics: Handler = async () => json(await healthService.runChecks());
+
+// ---------------------------------------------------------------------------
+// Pay cycles
+// ---------------------------------------------------------------------------
+
+export const listPeriods: Handler = async () => json({ periods: await periodService.summaries() });
+
+export const listPeriodProposals: Handler = async () => json({ proposals: await periodService.proposals() });
+
+export const createPeriod: Handler = async ({ body }) => {
+    const raw = bodyRecord(body);
+    const startDate = asString(raw.startDate);
+    if (!startDate) throw new ApiError(400, 'startDate is required (YYYY-MM-DD).');
+    const endDate = raw.endDate === null ? null : asString(raw.endDate);
+
+    try {
+        const period = await periodService.create({
+            startDate,
+            endDate,
+            source: 'manual',
+            note: asString(raw.note) || undefined,
+        });
+        return json({ period }, 201);
+    } catch (error) {
+        throw new ApiError(400, error instanceof Error ? error.message : 'Could not create the pay cycle.');
+    }
+};
+
+export const updatePeriod: Handler = async ({ params, body }) => {
+    const raw = bodyRecord(body);
+    try {
+        const period = await periodService.update(params.id, {
+            startDate: raw.startDate !== undefined ? asString(raw.startDate) || '' : undefined,
+            endDate: raw.endDate === null ? null : raw.endDate !== undefined ? asString(raw.endDate) || '' : undefined,
+            note: raw.note !== undefined ? asString(raw.note) || '' : undefined,
+        });
+        return json({ period });
+    } catch (error) {
+        throw new ApiError(400, error instanceof Error ? error.message : 'Could not update the pay cycle.');
+    }
+};
+
+export const deletePeriod: Handler = async ({ params }) => {
+    try {
+        await periodService.remove(params.id);
+        return json({ deleted: true, id: params.id });
+    } catch (error) {
+        throw new ApiError(404, error instanceof Error ? error.message : 'Pay cycle not found.');
+    }
+};
+
+export const applyPeriodProposals: Handler = async ({ body }) => {
+    const raw = bodyRecord(body);
+    const rows = Array.isArray(raw.periods) ? raw.periods : null;
+    if (!rows) throw new ApiError(400, 'periods must be an array.');
+
+    const proposals = rows.map(row => bodyRecord(row))
+        .map(row => ({ startDate: asString(row.startDate) || '', endDate: row.endDate === null ? null : asString(row.endDate) }));
+    if (proposals.some(proposal => !proposal.startDate)) {
+        throw new ApiError(400, 'Every proposal needs a startDate.');
+    }
+
+    return json(await periodService.applyProposals(proposals), 201);
+};
 
 export const exportData: Handler = async () => {
     const [transactions, accounts, categories, budgets, recurring, settings] = await Promise.all([

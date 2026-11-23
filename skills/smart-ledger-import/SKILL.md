@@ -122,6 +122,47 @@ difference is a `fee`. If you cannot identify the counterpart, ask.
 **Signs that something is off.** Dates outside the statement period, amounts with no merchant, a closing
 balance that does not follow from the rows. Report them; do not "fix" them.
 
+**Never shift a date to change its reporting month.** Salary arrives on different days each month, so the
+ledger stores salary-to-salary cycles separately (Step 3b). If the user asks to map a transaction into next
+month, explain the cycle and keep the real date.
+
+---
+
+## Step 3b — Pay cycles (salary periods)
+
+Reporting periods are stored as `pay_periods`, not derived from a global day. Read them before any
+period-based answer:
+
+```bash
+curl -sS "$BASE/api/periods" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+Each entry has `startDate`, `endDate` (null = current/open), `source`, `isCurrent`, plus income/expense and
+salary totals. Use those exact dates; "this month" means the cycle containing today.
+
+- **Never move a transaction date** to get it into a period. The cycle is the reporting unit; the date stays real.
+- **A new salary is not covered by a cycle:** ask for proposals, show them, and wait for approval before writing.
+
+  ```bash
+  curl -sS "$BASE/api/periods/proposals" -H "Authorization: Bearer $TOKEN"
+  # then, after the user approves:
+  curl -sS -X POST "$BASE/api/periods/apply" -H "Authorization: Bearer $TOKEN" \
+    -H 'content-type: application/json' \
+    -d '{"periods":[{"startDate":"2026-10-29","endDate":null}]}'
+  ```
+
+  Proposals come from income rows in the salary categories (Settings → Pay cycles, default: an income
+  category named like "Salary"). Credits within 10 days of each other count as one pay event, so a split
+  salary across Wise and Elevate Pay does not open two cycles.
+- **Correct a boundary:** `PATCH /api/periods/:id` with `startDate` and/or `endDate` (`endDate: null` for the
+  open current cycle). Manual edits win and are what every report uses.
+- **Reports:** `GET /api/summary?period=current` or `?period=previous`, or pass the cycle's `startDate`/
+  `endDate` as `from`/`to`. Always name the cycle dates in the answer (e.g. "29 Aug – 28 Sep").
+- **Salary sanity check:** count salary credits in the cycle. Zero, or more than one outside the 10-day split
+  window, is suspicious. Report it; never repair it by changing dates.
+- **History is stable:** past cycles are stored rows. Importing rows or changing a setting does not move
+  them; only an explicit edit of that cycle does.
+
 ---
 
 ## Step 4 — Reconcile the statement itself (blocks the write)
@@ -346,13 +387,17 @@ Undo each chunk batch separately. If the ledger already contains unrelated chang
 Never write while answering questions.
 
 ```bash
+curl -sS "$BASE/api/periods" -H "Authorization: Bearer $TOKEN"
+curl -sS "$BASE/api/summary?period=current&groupBy=month" -H "Authorization: Bearer $TOKEN"
 curl -sS "$BASE/api/summary?from=2026-11-01&to=2026-11-30&groupBy=month" -H "Authorization: Bearer $TOKEN"
 curl -sS "$BASE/api/balances?currency=PKR" -H "Authorization: Bearer $TOKEN"
 curl -sS "$BASE/api/transactions?type=expense&limit=500" -H "Authorization: Bearer $TOKEN"
 curl -sS "$BASE/api/export" -H "Authorization: Bearer $TOKEN" > /tmp/sl-run/export.json
 ```
 
-`/api/summary` excludes transfers and reports fees separately. Always name the currency.
+For "this month", "last month" or "my salary cycle", resolve the stored pay cycle first and use its dates.
+`?period=current` and `?period=previous` are shorthand for that. `/api/summary` excludes transfers and
+reports fees separately. Always name the currency and the cycle dates.
 
 ---
 
@@ -363,6 +408,8 @@ curl -sS "$BASE/api/export" -H "Authorization: Bearer $TOKEN" > /tmp/sl-run/expo
 - No secrets in output, logs, files, or commit-ready paths.
 - No guessing; unresolved items block the write.
 - Balance proof is part of the job, not an optional extra.
+- Never move a transaction date to change its reporting month; use the stored pay cycles.
+- New cycles and period edits need explicit approval, just like imports.
 
 ## Troubleshooting
 

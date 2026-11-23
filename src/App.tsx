@@ -5,6 +5,7 @@ import Accounts from './screens/Accounts';
 import Transactions from './screens/Transactions';
 import Analytics from './screens/Analytics';
 import Settings from './screens/Settings';
+import PayCycles from './screens/PayCycles';
 import Categories from './screens/Categories';
 import Budgets from './screens/Budgets';
 import Recurring from './screens/Recurring';
@@ -25,6 +26,8 @@ import { convert } from './utils/money';
 import { setDate, subMonths, startOfDay, isAfter, parseISO } from 'date-fns';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
+import { periodService } from './services/periodService';
+import { coversDay, toDay } from './services/payPeriodMath';
 import { sqliteService } from './services/sqliteService';
 import { secretsService, SECRET_KEYS } from './services/secretsService';
 import { apiServer } from './services/apiServer';
@@ -200,6 +203,7 @@ const App: React.FC = () => {
       if (budgets.length === 0) return;
       const allTx = await transactionService.getAllTransactions();
       const now = new Date();
+      const currentCycle = await periodService.current();
       const day = settings.monthStartDay || 1;
       let periodStart = startOfDay(setDate(now, day));
       if (isAfter(periodStart, now)) periodStart = subMonths(periodStart, 1);
@@ -207,7 +211,7 @@ const App: React.FC = () => {
       budgets.forEach((budget, i) => {
         const spent = allTx
           .filter(t => t.type === 'Expense' && t.categoryId === budget.categoryId)
-          .filter(t => isAfter(parseISO(t.date), periodStart))
+          .filter(t => currentCycle ? coversDay(currentCycle, toDay(t.date)) : isAfter(parseISO(t.date), periodStart))
           .reduce((sum, t) => sum + convert(t.amount, t.currency, budget.currency, settings), 0);
         if (spent > budget.amount) {
           const cat = categories.find(c => c.id === budget.categoryId);
@@ -355,9 +359,12 @@ const App: React.FC = () => {
             onNavigateCategories={() => setActiveTab('Categories')}
             onNavigateBudgets={() => setActiveTab('Budgets')}
             onNavigateRecurring={() => setActiveTab('Recurring')}
+            onNavigatePayCycles={() => setActiveTab('PayCycles')}
             settings={settings}
           />
         );
+      case 'PayCycles':
+        return <PayCycles categories={categories} settings={settings} onBack={() => setActiveTab('Settings')} />;
       case 'Budgets':
         return <Budgets budgets={budgets} categories={categories} settings={settings} />;
       case 'Recurring':

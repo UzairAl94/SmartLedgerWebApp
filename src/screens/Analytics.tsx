@@ -4,7 +4,8 @@ import { Calendar, ChevronDown } from 'lucide-react';
 import type { Transaction, Category, UserSettings } from '../types';
 import { formatCurrency } from '../utils/format';
 import { convert } from '../utils/money';
-import { DEFAULT_TIMEFRAME, TIMEFRAME_OPTIONS, timeframeBounds, type Timeframe } from '../utils/timeframes';
+import { DEFAULT_TIMEFRAME, TIMEFRAME_OPTIONS, describeRange, timeframeBounds, type Timeframe } from '../utils/timeframes';
+import { usePayPeriods } from '../hooks/usePayPeriods';
 import { transactionService } from '../services/transactionService';
 import {
     format,
@@ -25,7 +26,8 @@ interface AnalyticsProps {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
-    const [dateRange, setDateRange] = useState<Timeframe>(DEFAULT_TIMEFRAME);
+    const [dateRange, setDateRange] = useState<string>(DEFAULT_TIMEFRAME);
+    const { periods, current: currentCycle, previous: previousCycle } = usePayPeriods();
     const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // Analytics must operate on ALL transactions, not the 50-capped subscription list.
@@ -38,8 +40,48 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
         return unsub;
     }, []);
 
-    // 1. Determine Date Range Metadata
-    const { start: startDate, end: endDate, periodType } = useMemo(() => timeframeBounds(dateRange), [dateRange]);
+    // 1. Determine Date Range Metadata. Pay-cycle views use the stored cycles.
+    const { start: startDate, end: endDate, periodType } = useMemo(() => {
+        if (dateRange.startsWith('cycle:')) {
+            const cycle = periods.find(period => period.id === dateRange.slice(6));
+            if (cycle) {
+                return {
+                    start: parseISO(cycle.startDate),
+                    end: cycle.endDate ? parseISO(cycle.endDate) : new Date(),
+                    periodType: 'daily' as const,
+                };
+            }
+        }
+        if (periods.length > 0 && (dateRange === 'thisMonth' || dateRange === 'lastMonth')) {
+            const cycle = dateRange === 'thisMonth' ? currentCycle : previousCycle;
+            if (cycle) {
+                return {
+                    start: parseISO(cycle.startDate),
+                    end: cycle.endDate ? parseISO(cycle.endDate) : new Date(),
+                    periodType: 'daily' as const,
+                };
+            }
+        }
+        return timeframeBounds(dateRange as Timeframe);
+    }, [dateRange, periods, currentCycle, previousCycle]);
+
+    const timeframeOptions = useMemo(() => [
+        ...TIMEFRAME_OPTIONS.map(option => ({
+            ...option,
+            label: periods.length > 0 && option.value === 'thisMonth'
+                ? 'This Cycle'
+                : periods.length > 0 && option.value === 'lastMonth'
+                    ? 'Last Cycle'
+                    : option.label,
+        })),
+        ...periods
+            .slice()
+            .sort((a, b) => b.startDate.localeCompare(a.startDate))
+            .map(period => ({
+                value: `cycle:${period.id}`,
+                label: `${period.label}${period.isCurrent ? ' · current' : ''}`,
+            })),
+    ], [periods]);
 
     // 2. Filter Transactions
     const filteredTransactions = useMemo(() => {
@@ -127,18 +169,21 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
                 <h3 className="text-[20px] font-bold">Insights</h3>
 
                 {/* Date Filter Component */}
-                <div className="relative group z-20">
-                    <select
-                        value={dateRange}
-                        onChange={(e) => setDateRange(e.target.value as Timeframe)}
-                        className="appearance-none bg-white border border-black/5 pl-9 pr-8 py-2 rounded-xl text-[13px] font-bold text-text-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                        {TIMEFRAME_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                    </select>
-                    <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none" />
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <div className="flex flex-col items-end gap-1">
+                    <div className="relative group z-20">
+                        <select
+                            value={dateRange}
+                            onChange={(e) => setDateRange(e.target.value)}
+                            className="appearance-none bg-white border border-black/5 pl-9 pr-8 py-2 rounded-xl text-[13px] font-bold text-text-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                        >
+                            {timeframeOptions.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                        <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none" />
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-text-muted">{describeRange(startDate, endDate)}</span>
                 </div>
             </div>
 

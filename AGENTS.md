@@ -79,12 +79,14 @@ Each domain service is a singleton with an **observer pattern**: `subscribeToX(c
 6. Recent-transactions subscription is capped at **50** (`getRecentTransactions`). Anything needing more must call `getAllTransactions`.
 7. Category delete sets `categoryId` NULL on transactions (FK `ON DELETE SET NULL`); account delete cascades + manual cleanup in `deleteAccount` for old DBs without cascade.
 8. **NanoHTTPD does not parse PATCH bodies.** `ApiServerPlugin` reads the request stream itself for anything that is not POST/PUT; without that, every PATCH body arrives empty and silently no-ops.
-9. `scripts/seedCategories.js` is a standalone script; runtime seeding is `services/db/seeder.ts` (runs once, guarded by `settings.categories_seeded`).
+9. **Pay cycles are stored, not derived from a setting.** `pay_periods` holds each salary-to-salary range; Insights/History/Budgets read those rows. Never shift a transaction date to change its reporting month — edit the cycle instead. Deleting/recreating cycles changes reports, so treat them as data.
+10. `scripts/seedCategories.js` is a standalone script; runtime seeding is `services/db/seeder.ts` (runs once, guarded by `settings.categories_seeded`).
 
 ## Where things are
 - App entry/state/routing: `src/App.tsx`
 - Schema: `src/services/sqliteService.ts`
 - Balance math: `src/services/transactionService.ts` + `src/services/ledgerMath.ts`
+- Pay cycles: `src/services/periodService.ts` + `src/services/payPeriodMath.ts`, UI `src/screens/PayCycles.tsx`
 - Currency: `src/utils/money.ts` (the only rate table)
 - Security: `src/utils/crypto.ts` (PIN), `src/services/biometricService.ts`, `android/.../BiometricPlugin.java`
 - Backups: `src/services/backupService.ts` + `src/services/backupVerify.ts` + `src/utils/backupCrypto.ts`

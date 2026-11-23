@@ -20,10 +20,11 @@ interface SettingsProps {
     onNavigateCategories: () => void;
     onNavigateBudgets: () => void;
     onNavigateRecurring: () => void;
+    onNavigatePayCycles: () => void;
     settings: UserSettings | null;
 }
 
-const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBudgets, onNavigateRecurring, settings }) => {
+const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBudgets, onNavigateRecurring, onNavigatePayCycles, settings }) => {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isInstallable, setIsInstallable] = useState(false);
     // App-lock PIN sheet: null = closed, 'set-enable' = set PIN then turn lock on, 'change' = change existing PIN
@@ -1086,6 +1087,24 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                         <div className="flex-1 text-left">
                             <span className="block font-semibold text-[15px]">Recompute Balances</span>
                             <span className="text-[12px] text-text-muted">Fix balance drift from transactions</span>
+                        </div>
+                    </button>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3">
+                <h3 className="text-[14px] font-bold text-text-muted uppercase tracking-widest px-1">Reporting</h3>
+                <div className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm">
+                    <button
+                        onClick={onNavigatePayCycles}
+                        className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors"
+                    >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-50 text-indigo-600">
+                            <Calendar size={20} />
+                        </div>
+                        <div className="flex-1 text-left">
+                            <span className="block font-semibold text-[15px]">Pay cycles</span>
+                            <span className="text-[12px] text-text-muted">Set each salary-to-salary period once, so history never shifts</span>
                         </div>
                     </button>
                 </div>

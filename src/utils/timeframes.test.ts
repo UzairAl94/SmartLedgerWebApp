@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { endOfMonth, endOfYear, startOfMonth, startOfYear, subMonths } from 'date-fns';
-import { DEFAULT_TIMEFRAME, isWithinTimeframe, timeframeBounds } from './timeframes';
+import { describeRange, DEFAULT_TIMEFRAME, isWithinTimeframe, timeframeBounds } from './timeframes';
+import { parseISO } from 'date-fns';
 
 const now = new Date();
 
@@ -28,6 +29,20 @@ describe('timeframeBounds', () => {
         expect(timeframeBounds('Year').periodType).toBe('monthly');
         expect(timeframeBounds('Year').start.getTime()).toBe(startOfYear(now).getTime());
         expect(timeframeBounds('Year').end.getTime()).toBe(endOfYear(now).getTime());
+    });
+});
+
+describe('describeRange', () => {
+    it('shows inclusive start, end and day count', () => {
+        expect(describeRange(parseISO('2026-08-29T00:00:00'), parseISO('2026-09-28T00:00:00'))).toBe('29 Aug – 28 Sep · 31 days');
+    });
+
+    it('includes years when the range crosses one', () => {
+        expect(describeRange(parseISO('2025-12-28T00:00:00'), parseISO('2026-01-27T00:00:00'))).toContain('2025');
+    });
+
+    it('handles a single day', () => {
+        expect(describeRange(parseISO('2026-11-01T00:00:00'), parseISO('2026-11-01T00:00:00'))).toContain('1 day');
     });
 });
 

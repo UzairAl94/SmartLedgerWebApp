@@ -64,6 +64,13 @@ add('GET', '/api/reconcile', handlers.reconcile);
 add('GET', '/api/audit', handlers.listAudit);
 add('POST', '/api/audit/:id/undo', handlers.undoAudit);
 add('GET', '/api/diagnostics', handlers.diagnostics);
+
+add('GET', '/api/periods', handlers.listPeriods);
+add('GET', '/api/periods/proposals', handlers.listPeriodProposals);
+add('POST', '/api/periods', handlers.createPeriod);
+add('POST', '/api/periods/apply', handlers.applyPeriodProposals);
+add('PATCH', '/api/periods/:id', handlers.updatePeriod);
+add('DELETE', '/api/periods/:id', handlers.deletePeriod);
 add('GET', '/api/export', handlers.exportData);
 
 export const routeRequest = async (

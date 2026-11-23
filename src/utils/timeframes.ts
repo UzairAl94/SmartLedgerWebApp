@@ -7,6 +7,8 @@ import {
     endOfYear,
     startOfDay,
     endOfDay,
+    differenceInCalendarDays,
+    format,
 } from 'date-fns';
 
 export type Timeframe = '7days' | '30days' | 'thisMonth' | 'lastMonth' | '6Months' | 'Year';
@@ -50,4 +52,12 @@ export const isWithinTimeframe = (iso: string, range: Timeframe): boolean => {
 
     const { start, end } = timeframeBounds(range);
     return ms >= startOfDay(start).getTime() && ms <= endOfDay(end).getTime();
+};
+
+/** Human summary of a resolved range, e.g. "29 Aug – 28 Sep · 31 days". */
+export const describeRange = (start: Date, end: Date): string => {
+    const days = Math.abs(differenceInCalendarDays(end, start)) + 1;
+    const sameYear = start.getFullYear() === end.getFullYear();
+    const pattern = sameYear ? 'd MMM' : 'd MMM yyyy';
+    return `${format(start, pattern)} – ${format(end, pattern)} · ${days} day${days === 1 ? '' : 's'}`;
 };

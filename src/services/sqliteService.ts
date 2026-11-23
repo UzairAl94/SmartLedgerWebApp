@@ -304,6 +304,16 @@ class SqliteService {
                 batchId TEXT,
                 undoneAt TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS pay_periods (
+                id TEXT PRIMARY KEY,
+                startDate TEXT NOT NULL,
+                endDate TEXT,
+                source TEXT NOT NULL DEFAULT 'manual',
+                note TEXT,
+                createdAt TEXT,
+                updatedAt TEXT
+            );
         `;
     }
 

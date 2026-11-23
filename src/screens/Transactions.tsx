@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Pencil, ChevronDown, Calendar, Filter, SlidersHorizontal } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
 import { convert } from '../utils/money';
 import { isAmountHidden, MASK } from '../utils/visibility';
-import { DEFAULT_TIMEFRAME, TIMEFRAME_OPTIONS, isWithinTimeframe, type Timeframe } from '../utils/timeframes';
+import { DEFAULT_TIMEFRAME, TIMEFRAME_OPTIONS, describeRange, timeframeBounds, type Timeframe } from '../utils/timeframes';
+import { toDay } from '../services/payPeriodMath';
+import { usePayPeriods } from '../hooks/usePayPeriods';
 import type { Transaction, Category, Account, UserSettings } from '../types';
 import { isToday, isYesterday, format, parseISO } from 'date-fns';
 
@@ -28,7 +30,8 @@ const HISTORY_RANGE_OPTIONS: Array<{ value: HistoryRange; label: string }> = [
 const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accountFilter, setAccountFilter, settings, onEditTx, onViewTx }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense' | 'Transfer'>('All');
-    const [dateRange, setDateRange] = useState<HistoryRange>(DEFAULT_TIMEFRAME);
+    const [dateRange, setDateRange] = useState<string>(DEFAULT_TIMEFRAME);
+    const { periods, current: currentCycle, previous: previousCycle } = usePayPeriods();
     const [categoryFilter, setCategoryFilter] = useState<string>('');
     const [minAmount, setMinAmount] = useState('');
     const [maxAmount, setMaxAmount] = useState('');
@@ -44,11 +47,50 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
         return unsub;
     }, []);
 
-    // 1. Filter by Date Range
+    // 1. Resolve the selected range (stored cycles when they exist), then filter.
+    const activeRange = useMemo(() => {
+        if (dateRange === 'all') return null;
+
+        if (dateRange.startsWith('cycle:')) {
+            const cycle = periods.find(period => period.id === dateRange.slice(6));
+            if (cycle) return { start: parseISO(cycle.startDate), end: cycle.endDate ? parseISO(cycle.endDate) : new Date() };
+        }
+        if (periods.length > 0 && (dateRange === 'thisMonth' || dateRange === 'lastMonth')) {
+            const cycle = dateRange === 'thisMonth' ? currentCycle : previousCycle;
+            if (cycle) return { start: parseISO(cycle.startDate), end: cycle.endDate ? parseISO(cycle.endDate) : new Date() };
+        }
+
+        const bounds = timeframeBounds(dateRange as Timeframe);
+        return { start: bounds.start, end: bounds.end };
+    }, [dateRange, periods, currentCycle, previousCycle]);
+
+    const activeStart = activeRange ? format(activeRange.start, 'yyyy-MM-dd') : null;
+    const activeEnd = activeRange ? format(activeRange.end, 'yyyy-MM-dd') : null;
+    const rangeLabel = activeRange ? describeRange(activeRange.start, activeRange.end) : 'All time';
+
     const dateFilteredTransactions = transactions.filter(t => {
-        if (dateRange === 'all') return true;
-        return isWithinTimeframe(t.date, dateRange);
+        if (!activeStart || !activeEnd) return true;
+        const day = toDay(t.date);
+        return day >= activeStart && day <= activeEnd;
     });
+
+    const rangeOptions = [
+        ...HISTORY_RANGE_OPTIONS.map(option => ({
+            ...option,
+            label: periods.length > 0 && option.value === 'thisMonth'
+                ? 'This Cycle'
+                : periods.length > 0 && option.value === 'lastMonth'
+                    ? 'Last Cycle'
+                    : option.label,
+        })),
+        ...periods
+            .slice()
+            .sort((a, b) => b.startDate.localeCompare(a.startDate))
+            .map(period => ({
+                value: `cycle:${period.id}`,
+                label: `${period.label}${period.isCurrent ? ' · current' : ''}`,
+            })),
+    ];
 
     // 2. Filter by Account
     const accountFilteredTransactions = accountFilter
@@ -118,10 +160,10 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
                     <div className="relative group shrink-0 p-1">
                         <select
                             value={dateRange}
-                            onChange={(e) => setDateRange(e.target.value as HistoryRange)}
+                            onChange={(e) => setDateRange(e.target.value)}
                             className="appearance-none bg-white border border-black/5 pl-9 pr-8 py-2 rounded-xl text-[13px] font-bold text-text-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
                         >
-                            {HISTORY_RANGE_OPTIONS.map(option => (
+                            {rangeOptions.map(option => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
                             ))}
                         </select>
@@ -129,6 +171,8 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
                         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
                     </div>
                 </div>
+
+                <p className="text-[11px] font-semibold text-text-muted px-1 -mt-2">{rangeLabel}</p>
 
                 <div className="relative group">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={20} />
