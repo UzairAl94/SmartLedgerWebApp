@@ -9,11 +9,13 @@ interface PinPadProps {
      *  to flag an error: the dots shake and clear so the user can retry. */
     onComplete: (pin: string) => boolean | Promise<boolean>;
     accent?: 'primary' | 'expense';
+    /** Blocks input, e.g. while a lockout countdown is running. */
+    disabled?: boolean;
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
-const PinPad: React.FC<PinPadProps> = ({ title, subtitle, onComplete, accent = 'primary' }) => {
+const PinPad: React.FC<PinPadProps> = ({ title, subtitle, onComplete, accent = 'primary', disabled = false }) => {
     const [pin, setPin] = useState('');
     const [error, setError] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -35,7 +37,7 @@ const PinPad: React.FC<PinPadProps> = ({ title, subtitle, onComplete, accent = '
     };
 
     const press = (key: string) => {
-        if (busy || error) return;
+        if (busy || error || disabled) return;
         if (key === 'del') {
             setPin(p => p.slice(0, -1));
             return;
@@ -76,7 +78,7 @@ const PinPad: React.FC<PinPadProps> = ({ title, subtitle, onComplete, accent = '
             </motion.div>
 
             {/* Keypad */}
-            <div className="grid grid-cols-3 gap-4 w-full max-w-[280px]">
+            <div className={`grid grid-cols-3 gap-4 w-full max-w-[280px] ${disabled ? 'opacity-40' : ''}`.trim()}>
                 {KEYS.map((key, idx) => {
                     if (key === '') return <div key={idx} />;
                     const isDel = key === 'del';
@@ -85,7 +87,7 @@ const PinPad: React.FC<PinPadProps> = ({ title, subtitle, onComplete, accent = '
                             key={idx}
                             type="button"
                             onClick={() => press(key)}
-                            disabled={busy}
+                            disabled={busy || disabled}
                             className={`h-16 rounded-2xl flex items-center justify-center text-[24px] font-semibold active:scale-90 transition-all ${
                                 isDel
                                     ? 'text-text-muted'

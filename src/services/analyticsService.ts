@@ -1,5 +1,5 @@
 import type { Account, Category, Currency, Transaction, UserSettings } from '../types';
-import { convertCurrency } from '../utils/format';
+import { convert } from '../utils/money';
 
 export interface SummaryOptions {
     transactions: Transaction[];
@@ -76,8 +76,12 @@ export const analyticsService = {
 
             count++;
 
-            const amount = convertCurrency(tx.amount, tx.currency, targetCurrency, settings.customRates, settings.useCustomRates);
-            const fee = tx.fee ? convertCurrency(tx.fee, tx.currency, targetCurrency, settings.customRates, settings.useCustomRates) : 0;
+            // Prefer the frozen base amount so historical reports don't move when
+            // the user changes an exchange rate.
+            const amount = tx.baseAmount !== undefined && tx.baseAmount !== null && tx.baseCurrency
+                ? convert(tx.baseAmount, tx.baseCurrency, targetCurrency, settings)
+                : convert(tx.amount, tx.currency, targetCurrency, settings);
+            const fee = tx.fee ? convert(tx.fee, tx.currency, targetCurrency, settings) : 0;
             fees += fee;
 
             if (tx.type !== 'Income' && tx.type !== 'Expense') continue;
@@ -172,12 +176,11 @@ export const analyticsService = {
             name: account.name,
             currency: account.currency,
             balance: account.balance,
-            balanceConverted: convertCurrency(
+            balanceConverted: convert(
                 account.balance,
                 account.currency,
                 targetCurrency,
-                settings.customRates,
-                settings.useCustomRates
+                settings
             ),
         }));
 

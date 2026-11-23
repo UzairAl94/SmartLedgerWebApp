@@ -17,7 +17,7 @@ export class WebDbProvider implements IDbProvider {
             storeName: 'smart_ledger_store'
         });
         this.isInitialized = true;
-        console.log('Web database (localforage) initialized');
+        console.info('Web database (localforage) initialized');
     }
 
     private async getTable(tableName: string): Promise<any[]> {

@@ -17,37 +17,3 @@ export const formatCurrency = (amount: number, currency: Currency) => {
 
     return formatter.format(amount);
 };
-
-const exchangeRates: Record<Currency, number> = {
-    'PKR': 1,
-    'USD': 278.5,
-    'AED': 75.8,
-    'MYR': 62.0, // Malaysian Ringgit
-};
-
-export const convertCurrency = (
-    amount: number,
-    from: Currency,
-    to: Currency,
-    customRates?: Record<string, number>,
-    useCustomRates?: boolean
-) => {
-    if (!Number.isFinite(amount)) return 0;
-    if (from === to) return amount;
-
-    // Use custom rates if provided and enabled
-    const rates = (useCustomRates && customRates)
-        ? { ...exchangeRates, ...customRates }
-        : exchangeRates;
-
-    const fromRate = rates[from];
-    const toRate = rates[to];
-    if (!Number.isFinite(fromRate) || !Number.isFinite(toRate) || toRate === 0) {
-        return 0;
-    }
-
-    // Convert from 'from' to PKR
-    const inPKR = amount * fromRate;
-    // Convert from PKR to 'to'
-    return inPKR / toRate;
-};

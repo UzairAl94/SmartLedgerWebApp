@@ -18,13 +18,14 @@ Personal finance / expense tracker. **Offline-first mobile app**: voice or manua
 ## Commands
 
 ```bash
-npm run dev       # vite dev server (host:true, LAN accessible)
-npm run build     # tsc -b && vite build  → dist/
-npm run lint      # eslint
-npm run preview   # serve built dist
+npm run dev         # vite dev server (host:true, LAN accessible)
+npm run build       # tsc -b && vite build  → dist/
+npm run lint        # eslint
+npm run test:run    # vitest (pure logic: money, ledger math, backup crypto, validation)
+npm run preview     # serve built dist
 # Android: npm run build && npx cap sync android && npx cap open android
 ```
-No test framework configured.
+Vitest covers pure modules only; there is no component/E2E suite. After installing a debug APK, force-stop and relaunch once — the first launch can serve cached assets.
 
 ## Architecture
 
@@ -54,8 +55,9 @@ Each domain service is a singleton with an **observer pattern**: `subscribeToX(c
 - `elevenLabsService.transcribeAudio` — Blob → text.
 
 ### Money model
-- Each `Account` stores a denormalized `balance`, updated on every tx create/edit/delete. `transactionService` does manual revert-then-reapply on edit/delete to keep balances consistent.
-- Transactions store their own `currency`; balance updates convert into the account's currency via `convertCurrency` (`utils/format.ts`).
+- Each `Account` stores a denormalized `balance`, recomputed from `initialBalance + sum(transaction deltas)` after every write. `recalculateBalances()` is authoritative.
+- One converter: `src/utils/money.ts` (`convert`, `resolveRates`, `DEFAULT_RATES`). It is the only rate table in the app; custom rates apply when `settings.useCustomRates` is on, pivoted through PKR.
+- Transactions store their own `currency` **and the conversion frozen at write time**: `accountAmount`, `accountFee`, `toAccountAmount`, `baseAmount`, `baseCurrency`, `fxRate` (schema v3). Balance math uses these, so changing a rate later cannot rewrite history. Legacy rows are backfilled once during the v3 migration.
 - Types: `Income | Expense | Transfer`. Transfer touches two accounts (`accountId` → `toAccountId`). Optional `fee`.
 - Currencies: `PKR (base) | USD | AED | MYR`. PKR formatted as `Rs`, others via `Intl.NumberFormat`.
 
@@ -69,11 +71,11 @@ Each domain service is a singleton with an **observer pattern**: `subscribeToX(c
 
 ## ⚠️ Gotchas / known weak spots
 
-1. **Two currency-conversion implementations.** `utils/format.ts convertCurrency` (hardcoded rates) is what `transactionService` actually uses for balance math — it does **not** receive the user's `customRates`, so custom rates in Settings don't affect stored balances. `currencyService.ts` is a separate settings-aware converter used elsewhere. Hardcoded rates are also duplicated/inconsistent across `format.ts`, `currencyService.ts`, and `settingsService` defaults.
+1. **Currency behavior is frozen per row.** `utils/money.ts` is the only converter. New transactions store their converted amounts; `recalculateBalances()` prefers those and only falls back to live rates for rows migrated before schema v3. An edit recomputes the row's frozen amounts on purpose.
 2. **Web provider is a toy SQL engine.** Anything beyond simple CRUD + single-column WHERE won't work on web. Verify DB-related features on a native build.
-3. **API keys are plaintext.** Stored in the `settings` table and sent from the client (`dangerouslyAllowBrowser: true`). Seeded from `VITE_DEEPSEEK_API_KEY` / `VITE_ELEVEN_LABS_API_KEY` env at first run.
+3. **API keys live in secure storage.** `secretsService` uses the Android Keystore (localStorage on web) and migrates legacy keys out of the settings table on boot. Requests still leave the device for DeepSeek/ElevenLabs.
 4. **Privacy boundary:** voice/text transactions are sent to ElevenLabs + DeepSeek. The "Local Storage Mode" banner refers to *storage*, not processing.
-5. `transactionService.fetchAndNotify` is public; `accountService.fetchAndNotify` is private and poked via `(accountService as any)` — leaky.
+5. `fetchAndNotify` is public on the service singletons and is called directly by other services after batch writes.
 6. Recent-transactions subscription is capped at **50** (`getRecentTransactions`). Anything needing more must call `getAllTransactions`.
 7. Category delete sets `categoryId` NULL on transactions (FK `ON DELETE SET NULL`); account delete cascades + manual cleanup in `deleteAccount` for old DBs without cascade.
 8. `scripts/seedCategories.js` is a standalone script; runtime seeding is `services/db/seeder.ts` (runs once, guarded by `settings.categories_seeded`).
@@ -81,7 +83,11 @@ Each domain service is a singleton with an **observer pattern**: `subscribeToX(c
 ## Where things are
 - App entry/state/routing: `src/App.tsx`
 - Schema: `src/services/sqliteService.ts`
-- Balance math: `src/services/transactionService.ts` + `src/utils/format.ts`
+- Balance math: `src/services/transactionService.ts` + `src/services/ledgerMath.ts`
+- Currency: `src/utils/money.ts` (the only rate table)
+- Security: `src/utils/crypto.ts` (PIN), `src/services/biometricService.ts`, `android/.../BiometricPlugin.java`
+- Backups: `src/services/backupService.ts` + `src/services/backupVerify.ts` + `src/utils/backupCrypto.ts`
+- Import skill: `skills/smart-ledger-import/` (installed at `~/.agents/skills/smart-ledger-import/`)
 - AI prompt: `src/services/deepSeekService.ts`
 - Design tokens: `src/index.css`
 - Android project: `android/` · Capacitor config: `capacitor.config.ts`

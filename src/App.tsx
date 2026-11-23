@@ -21,7 +21,7 @@ import { recurringService } from './services/recurringService';
 import { notificationService } from './services/notificationService';
 import { backupService } from './services/backupService';
 import { settingsService } from './services/settingsService';
-import { convertCurrency } from './utils/format';
+import { convert } from './utils/money';
 import { setDate, subMonths, startOfDay, isAfter, parseISO } from 'date-fns';
 import { deepSeekService } from './services/deepSeekService';
 import { ledgerEngine, LedgerValidationError } from './services/ledgerEngine';
@@ -208,7 +208,7 @@ const App: React.FC = () => {
         const spent = allTx
           .filter(t => t.type === 'Expense' && t.categoryId === budget.categoryId)
           .filter(t => isAfter(parseISO(t.date), periodStart))
-          .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, budget.currency, settings.customRates, settings.useCustomRates), 0);
+          .reduce((sum, t) => sum + convert(t.amount, t.currency, budget.currency, settings), 0);
         if (spent > budget.amount) {
           const cat = categories.find(c => c.id === budget.categoryId);
           notificationService.notify(

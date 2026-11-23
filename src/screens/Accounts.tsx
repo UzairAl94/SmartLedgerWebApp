@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Banknote, Trash2, Eye, EyeOff, Mic, Square, Loader2, Info } from 'lucide-react';
 import { accountService } from '../services/accountService';
-import { formatCurrency, convertCurrency } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { convert } from '../utils/money';
 import { isAmountHidden, MASK } from '../utils/visibility';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
@@ -26,7 +27,7 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
     const mainCurrency = settings?.mainCurrency || 'PKR';
 
     // Calculate Net Worth
-    const netWorth = accounts.reduce((sum: number, acc: Account) => sum + convertCurrency(acc.balance, acc.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+    const netWorth = accounts.reduce((sum: number, acc: Account) => sum + convert(acc.balance, acc.currency, mainCurrency, settings), 0);
 
     const [isDeleting, setIsDeleting] = useState(false);
     const [showAmounts, setShowAmounts] = useState(false);
@@ -156,7 +157,7 @@ const Accounts: React.FC<AccountsProps> = ({ accounts, transactions, categories,
                                 <span className="block font-bold text-[15px]">{showAmounts ? formatCurrency(account.balance, account.currency) : '••••'}</span>
                                 {showAmounts && account.currency !== mainCurrency && (
                                     <span className="text-[11px] text-text-muted font-medium">
-                                        ≈ {formatCurrency(convertCurrency(account.balance, account.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), mainCurrency)}
+                                        ≈ {formatCurrency(convert(account.balance, account.currency, mainCurrency, settings), mainCurrency)}
                                     </span>
                                 )}
                             </div>

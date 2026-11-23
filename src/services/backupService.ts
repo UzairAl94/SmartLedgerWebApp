@@ -10,20 +10,20 @@ import { recurringService } from './recurringService';
 import { settingsService } from './settingsService';
 import { sqliteService } from './sqliteService';
 import { receiptService } from './receiptService';
-import type { Account, Transaction, Category, Budget, RecurringTransaction, UserSettings } from '../types';
+import { secretsService, SECRET_KEYS } from './secretsService';
+import { decryptBackup, encryptBackup, isEncryptedBackup } from '../utils/backupCrypto';
+import { verifyBackupData, type BackupData, type BackupVerification } from './backupVerify';
 
-interface BackupData {
-    version: number;
-    timestamp: string;
-    accounts: Account[];
-    transactions: Transaction[];
-    categories: Category[];
-    budgets?: Budget[];
-    recurring?: RecurringTransaction[];
-    settings: UserSettings | null;
+export type { BackupVerification } from './backupVerify';
+
+interface ParsedBackup {
+    data: BackupData;
+    receipts: Map<string, string> | null;
+    warnings: string[];
+    encrypted: boolean;
 }
 
-// Re-seed all tables from a parsed backup payload. Shared by ZIP and legacy JSON restore.
+// Re-seed all tables from a parsed backup payload.
 const restoreData = async (data: BackupData) => {
     await sqliteService.transaction(async (db) => {
         // Delete children before parents (FKs are ON on native).
@@ -50,8 +50,18 @@ const restoreData = async (data: BackupData) => {
 
         for (const tx of data.transactions) {
             await db.execute(
-                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden, externalId, importBatchId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [tx.id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null]
+                `INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note,
+                    type, fee, receiptPath, hidden, externalId, importBatchId,
+                    accountAmount, accountFee, toAccountAmount, baseAmount, baseCurrency, fxRate, cleared)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    tx.id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null,
+                    tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null,
+                    tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null,
+                    tx.accountAmount ?? null, tx.accountFee ?? null, tx.toAccountAmount ?? null,
+                    tx.baseAmount ?? null, tx.baseCurrency || null, tx.fxRate ?? null,
+                    tx.cleared ? 1 : 0,
+                ]
             );
         }
 
@@ -83,11 +93,27 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const isWeb = () => Capacitor.getPlatform() === 'web';
 
-// Assemble the backup ZIP (data.json + receipt images).
+const bytesToBase64 = (bytes: Uint8Array): string => {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+    }
+    return btoa(binary);
+};
+
+const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const digest = await crypto.subtle.digest('SHA-256', copy);
+    return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+};
+
+// Assemble the backup ZIP (data.json + manifest + receipt images).
 const buildBackupZip = async (): Promise<JSZip> => {
     const transactions = await transactionService.getAllTransactions();
     const data: BackupData = {
-        version: 3,
+        version: 4,
         timestamp: new Date().toISOString(),
         accounts: await accountService.getAllAccounts(),
         transactions,
@@ -96,8 +122,16 @@ const buildBackupZip = async (): Promise<JSZip> => {
         recurring: await recurringService.getAll(),
         settings: await settingsService.getSettings(),
     };
+
+    const json = JSON.stringify(data, null, 2);
     const zip = new JSZip();
-    zip.file('data.json', JSON.stringify(data, null, 2));
+    zip.file('data.json', json);
+    zip.file('manifest.json', JSON.stringify({
+        format: 1,
+        sha256: await sha256Hex(new TextEncoder().encode(json)),
+        createdAt: data.timestamp,
+    }, null, 2));
+
     for (const tx of transactions) {
         if (!tx.receiptPath) continue;
         try {
@@ -110,20 +144,37 @@ const buildBackupZip = async (): Promise<JSZip> => {
     return zip;
 };
 
-const backupFileName = (): string => {
+const backupFileName = (encrypted: boolean): string => {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
     const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`;
-    return `${BACKUP_PREFIX}${stamp}.zip`;
+    return `${BACKUP_PREFIX}${stamp}.${encrypted ? 'slbk' : 'zip'}`;
 };
 
-// Manual export / "Back up to Drive": build ZIP and hand to the share sheet
-// (web downloads the file directly).
-const shareBackupZip = async (): Promise<void> => {
+const storedPassphrase = (): Promise<string | null> => secretsService.getKey(SECRET_KEYS.backupPassphrase);
+
+// Build the archive and, when enabled, encrypt it with the stored passphrase.
+const buildBackupBytes = async (): Promise<{ bytes: Uint8Array; encrypted: boolean }> => {
     const zip = await buildBackupZip();
-    const fileName = backupFileName();
+    const settings = await settingsService.getSettings();
+    let bytes = await zip.generateAsync({ type: 'uint8array' });
+
+    if (!settings.backupEncryptionEnabled) return { bytes, encrypted: false };
+
+    const passphrase = await storedPassphrase();
+    if (!passphrase) throw new Error('Encrypted backups are enabled but no passphrase is stored. Set one in Settings.');
+    bytes = await encryptBackup(bytes, passphrase);
+    return { bytes, encrypted: true };
+};
+
+// Manual export / "Back up to Drive": build the archive and hand it to the
+// share sheet (web downloads the file directly).
+const shareBackupZip = async (): Promise<void> => {
+    const { bytes, encrypted } = await buildBackupBytes();
+    const fileName = backupFileName(encrypted);
+
     if (isWeb()) {
-        const blob = await zip.generateAsync({ type: 'blob' });
+        const blob = new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -134,11 +185,17 @@ const shareBackupZip = async (): Promise<void> => {
         URL.revokeObjectURL(url);
         return;
     }
-    const base64Zip = await zip.generateAsync({ type: 'base64' });
-    const result = await Filesystem.writeFile({ path: fileName, data: base64Zip, directory: Directory.Cache });
+
+    const result = await Filesystem.writeFile({
+        path: fileName,
+        data: bytesToBase64(bytes),
+        directory: Directory.Cache,
+    });
     await Share.share({
         title: 'Smart Ledger Backup',
-        text: 'Your financial record backup (includes receipts).',
+        text: encrypted
+            ? 'Encrypted Smart Ledger backup. Keep the passphrase safe — it cannot be recovered.'
+            : 'Your financial record backup (includes receipts).',
         url: result.uri,
         dialogTitle: 'Save your backup',
     });
@@ -167,11 +224,10 @@ const pruneOldBackups = async (): Promise<void> => {
 // Silent local backup into Documents/SmartLedger, then prune old files.
 const runAutoBackup = async (): Promise<void> => {
     if (isWeb()) return; // no silent file writes on web
-    const zip = await buildBackupZip();
-    const base64Zip = await zip.generateAsync({ type: 'base64' });
+    const { bytes, encrypted } = await buildBackupBytes();
     await Filesystem.writeFile({
-        path: `${BACKUP_DIR}/${backupFileName()}`,
-        data: base64Zip,
+        path: `${BACKUP_DIR}/${backupFileName(encrypted)}`,
+        data: bytesToBase64(bytes),
         directory: Directory.Documents,
         recursive: true,
     });
@@ -226,7 +282,7 @@ const parseBackupJson = (text: string): BackupData => {
     try {
         data = JSON.parse(text) as BackupData;
     } catch {
-        throw new Error('Invalid backup file: expected a Smart Ledger .zip or .json backup.');
+        throw new Error('Invalid backup file: expected a Smart Ledger .zip, .slbk or .json backup.');
     }
     if (!isValidBackupData(data)) {
         throw new Error('Invalid backup file format.');
@@ -236,60 +292,101 @@ const parseBackupJson = (text: string): BackupData => {
 
 // ZIP files always start with "PK\x03\x04". Detect by content because Android's
 // document picker sometimes returns a ZIP without a .zip extension.
-const isZipBuffer = (buffer: ArrayBuffer): boolean => {
+const isZipBuffer = (buffer: Uint8Array): boolean => {
     if (buffer.byteLength < 4) return false;
-    const bytes = new Uint8Array(buffer, 0, 4);
-    return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+    return buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
 };
 
-const decodeBuffer = (buffer: ArrayBuffer): string => new TextDecoder('utf-8').decode(buffer);
-
-const restoreLegacyJson = async (text: string): Promise<void> => {
-    const data = parseBackupJson(text);
-    await restoreData(data);
-    window.location.reload();
-};
-
-const restoreZip = async (zip: JSZip): Promise<void> => {
-    const dataFile = zip.file('data.json');
-    if (!dataFile) throw new Error('Invalid backup: data.json missing.');
-    const data = parseBackupJson(await dataFile.async('string'));
-
-    // Clear existing receipt files, then restore the ones from the archive.
-    await receiptService.clearAll();
-    for (const tx of data.transactions) {
-        if (!tx.receiptPath) continue;
-        const f = zip.file(tx.receiptPath);
-        if (f) await receiptService.writeBase64(tx.receiptPath, await f.async('base64'));
-    }
-
-    await restoreData(data);
-    window.location.reload();
-};
-
-const restoreInput = async (input: string | ArrayBuffer): Promise<void> => {
+const toBytes = (input: string | ArrayBuffer | Uint8Array): Uint8Array => {
     if (typeof input === 'string') {
         const trimmed = input.trimStart();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-            return restoreLegacyJson(input);
-        }
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) return new TextEncoder().encode(input);
         if (trimmed.startsWith('PK')) {
             // Binary ZIP that was read as text (older callers).
             const bytes = new Uint8Array(input.length);
-            for (let index = 0; index < input.length; index++) {
-                bytes[index] = input.charCodeAt(index) & 0xff;
-            }
-            return restoreZip(await JSZip.loadAsync(bytes));
+            for (let index = 0; index < input.length; index++) bytes[index] = input.charCodeAt(index) & 0xff;
+            return bytes;
         }
-        throw new Error('Invalid backup file: expected a Smart Ledger .zip or .json backup.');
+        throw new Error('Invalid backup file: expected a Smart Ledger .zip, .slbk or .json backup.');
+    }
+    if (input instanceof Uint8Array) return input;
+    return new Uint8Array(input);
+};
+
+/**
+ * Decode a backup from any supported input. Encrypted archives need the
+ * passphrase; nothing is written here.
+ */
+const readBackup = async (
+    input: string | ArrayBuffer | Uint8Array,
+    passphrase?: string
+): Promise<ParsedBackup> => {
+    let bytes = toBytes(input);
+    let encrypted = false;
+
+    if (isEncryptedBackup(bytes)) {
+        encrypted = true;
+        if (!passphrase) throw new Error('This backup is encrypted. Enter its passphrase to continue.');
+        bytes = await decryptBackup(bytes, passphrase);
     }
 
-    if (isZipBuffer(input)) {
-        return restoreZip(await JSZip.loadAsync(input));
+    const warnings: string[] = [];
+
+    if (isZipBuffer(bytes)) {
+        const zip = await JSZip.loadAsync(bytes);
+        const dataFile = zip.file('data.json');
+        if (!dataFile) throw new Error('Invalid backup: data.json missing.');
+        const text = await dataFile.async('string');
+
+        const manifestFile = zip.file('manifest.json');
+        if (manifestFile) {
+            try {
+                const manifest = JSON.parse(await manifestFile.async('string')) as { sha256?: string };
+                if (manifest.sha256) {
+                    const actual = await sha256Hex(new TextEncoder().encode(text));
+                    if (actual !== manifest.sha256) warnings.push('data.json does not match the archive manifest.');
+                }
+            } catch {
+                warnings.push('manifest.json could not be read.');
+            }
+        }
+
+        const data = parseBackupJson(text);
+        const receipts = new Map<string, string>();
+        for (const tx of data.transactions) {
+            if (!tx.receiptPath) continue;
+            const file = zip.file(tx.receiptPath);
+            if (file) receipts.set(tx.receiptPath, await file.async('base64'));
+        }
+        return { data, receipts, warnings, encrypted };
     }
 
-    // JSON file read as bytes (some pickers lose the extension).
-    return restoreLegacyJson(decodeBuffer(input));
+    return { data: parseBackupJson(new TextDecoder().decode(bytes)), receipts: null, warnings, encrypted };
+};
+
+const verifyParsed = (parsed: ParsedBackup): BackupVerification =>
+    verifyBackupData({
+        data: parsed.data,
+        receiptPaths: parsed.receipts ? new Set(parsed.receipts.keys()) : null,
+        warnings: parsed.warnings,
+        encrypted: parsed.encrypted,
+    });
+
+const restoreParsed = async (parsed: ParsedBackup): Promise<void> => {
+    const report = verifyParsed(parsed);
+    if (report.issues.length > 0) {
+        throw new Error(`Backup failed verification:\n- ${report.issues.slice(0, 5).join('\n- ')}`);
+    }
+
+    if (parsed.receipts) {
+        await receiptService.clearAll();
+        for (const [path, base64] of parsed.receipts) {
+            await receiptService.writeBase64(path, base64);
+        }
+    }
+
+    await restoreData(parsed.data);
+    window.location.reload();
 };
 
 export const backupService = {
@@ -304,13 +401,28 @@ export const backupService = {
     pruneOldBackups,
     maybeRunScheduledBackup,
 
-    /**
-     * Restore from a ZIP or legacy JSON backup. The format is detected from the
-     * content, not the file extension.
-     */
-    restoreBackup: async (input: string | ArrayBuffer): Promise<void> => {
+    /** True when the selected file is an encrypted (.slbk) backup. */
+    isEncrypted: (input: string | ArrayBuffer | Uint8Array): boolean => {
         try {
-            await restoreInput(input);
+            return isEncryptedBackup(toBytes(input));
+        } catch {
+            return false;
+        }
+    },
+
+    /** Parse and validate a backup without writing anything. */
+    verifyBackup: async (
+        input: string | ArrayBuffer | Uint8Array,
+        passphrase?: string
+    ): Promise<BackupVerification> => verifyParsed(await readBackup(input, passphrase)),
+
+    /**
+     * Restore from a ZIP, encrypted .slbk, or legacy JSON backup.
+     * The format is detected from the content, not the file extension.
+     */
+    restoreBackup: async (input: string | ArrayBuffer | Uint8Array, passphrase?: string): Promise<void> => {
+        try {
+            await restoreParsed(await readBackup(input, passphrase));
         } catch (error) {
             console.error('Restore failed:', error);
             throw error;

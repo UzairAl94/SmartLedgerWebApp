@@ -39,6 +39,14 @@ export interface Transaction {
   hidden?: number; // 1 = mask the amount in the UI (still counted in totals)
   externalId?: string; // caller-supplied idempotency key (e.g. statement row id)
   importBatchId?: string; // groups rows created by one API import; enables undo
+  // Frozen conversion at write time. Keeps history stable when rates change.
+  accountAmount?: number; // amount in the source account's currency
+  accountFee?: number; // fee in the source account's currency
+  toAccountAmount?: number; // transfer amount in the destination account's currency
+  baseAmount?: number; // amount in the main currency at write time
+  baseCurrency?: Currency; // currency that baseAmount is expressed in
+  fxRate?: number; // tx currency -> account currency rate used
+  cleared?: number; // 1 = reconciled against a statement
 }
 
 export interface Budget {
@@ -75,12 +83,16 @@ export interface UserSettings {
   useCustomRates: boolean;
   customRates: ConversionRates;
   appLockEnabled: boolean;
-  appPin?: string; // SHA-256 hash of the 4-digit PIN
+  appPin?: string; // PBKDF2 hash (legacy: SHA-256 hex or plaintext, upgraded on unlock)
+  biometricUnlockEnabled?: boolean;
+  pinFailedAttempts?: number;
+  pinLockedUntil?: string; // ISO timestamp while the PIN is locked out
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
   autoBackupEnabled: boolean;
   backupFrequency: 'daily' | 'weekly' | 'monthly';
   backupTime: string; // 'HH:mm' — soft threshold for the launch-time due-check
+  backupEncryptionEnabled?: boolean; // encrypt exports and auto-backups with the stored passphrase
   lastBackupAt?: string; // ISO of last successful auto-backup
   apiServerPort: number; // local API port (Android server)
   apiServerAllowLan: boolean; // bind 0.0.0.0 so other devices can reach it

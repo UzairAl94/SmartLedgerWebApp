@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(CapacitorSQLitePlugin.class);
         registerPlugin(ApiServerPlugin.class);
+        registerPlugin(BiometricPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -2,10 +2,15 @@ import { sqliteService } from './sqliteService';
 import { accountService } from './accountService';
 import { settingsService } from './settingsService';
 import { receiptService } from './receiptService';
-import { convertCurrency } from '../utils/format';
+import { accountDeltas, computeAmounts } from './ledgerMath';
 import type { Transaction, Account } from '../types';
 
 type Listener = (transactions: Transaction[]) => void;
+
+const INSERT_COLUMNS = `id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee,
+    receiptPath, hidden, externalId, importBatchId,
+    accountAmount, accountFee, toAccountAmount, baseAmount, baseCurrency, fxRate`;
+const INSERT_PLACEHOLDERS = '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?';
 
 class TransactionService {
     private listeners: Listener[] = [];
@@ -62,65 +67,58 @@ class TransactionService {
         return (fromResult.values?.length || 0) + (toResult.values?.length || 0);
     }
 
-    // Add transaction and update account balance atomically.
+    private async getAccount(id: string): Promise<Account | null> {
+        const result = await sqliteService.query('SELECT * FROM accounts WHERE id = ?', [id]);
+        return (result.values?.[0] as Account) || null;
+    }
+
+    private insertValues(id: string, tx: Omit<Transaction, 'id'>, amounts: ReturnType<typeof computeAmounts>) {
+        return [
+            id,
+            tx.amount,
+            tx.currency,
+            tx.categoryId || null,
+            tx.accountId,
+            tx.toAccountId || null,
+            tx.date,
+            tx.note || null,
+            tx.type,
+            tx.fee || null,
+            tx.receiptPath || null,
+            tx.hidden ? 1 : 0,
+            tx.externalId || null,
+            tx.importBatchId || null,
+            amounts.accountAmount,
+            amounts.accountFee,
+            amounts.toAccountAmount ?? null,
+            amounts.baseAmount,
+            amounts.baseCurrency,
+            amounts.fxRate,
+        ];
+    }
+
+    // Add a transaction and reconcile balances once.
     // Pass { recalculate: false } when creating a batch (e.g. recurring catch-up)
     // and call recalculateBalances() once at the end.
     async createTransaction(tx: Omit<Transaction, 'id'>, options: { recalculate?: boolean } = {}) {
         const id = crypto.randomUUID();
-        const { customRates, useCustomRates } = await settingsService.getSettings();
+        const settings = await settingsService.getSettings();
 
-        console.log('Creating transaction for account:', tx.accountId);
+        const source = await this.getAccount(tx.accountId);
+        if (!source) throw new Error('Source account does not exist!');
 
-        await sqliteService.transaction(async (db) => {
-            console.log('Inside transaction, querying for account:', tx.accountId);
-            const accountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.accountId]);
-            console.log('Account query result:', accountResult);
+        let destination: Account | null = null;
+        if (tx.type === 'Transfer' && tx.toAccountId) {
+            destination = await this.getAccount(tx.toAccountId);
+            if (!destination) throw new Error('Destination account does not exist!');
+        }
 
-            if (!accountResult.values || accountResult.values.length === 0) {
-                // Let's also check all accounts to see what's in the DB
-                const allAccounts = await db.query('SELECT id, name FROM accounts');
-                console.error('No account found with id:', tx.accountId);
-                console.error('Available accounts:', allAccounts.values);
-                throw new Error("Source account does not exist!");
-            }
-            const accountData = accountResult.values[0] as Account;
+        const amounts = computeAmounts(tx, source, destination, settings);
+        await sqliteService.execute(
+            `INSERT INTO transactions (${INSERT_COLUMNS}) VALUES (${INSERT_PLACEHOLDERS})`,
+            this.insertValues(id, tx, amounts)
+        );
 
-            // Convert transaction amount to account currency for balance update
-            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency, customRates, useCustomRates);
-            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency, customRates, useCustomRates) : 0;
-
-            let newBalance = accountData.balance;
-            if (tx.type === 'Income') {
-                newBalance = accountData.balance + amountInAccountCurrency - feeInAccountCurrency;
-            } else {
-                newBalance = accountData.balance - amountInAccountCurrency - feeInAccountCurrency;
-            }
-
-            // Create the transaction record
-            await db.run(
-                'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden, externalId, importBatchId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null]
-            );
-
-            // Update source account balance
-            await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newBalance, tx.accountId]);
-
-            // Handle Transfer destination account
-            if (tx.type === 'Transfer' && tx.toAccountId) {
-                const toAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.toAccountId]);
-                if (!toAccountResult.values || toAccountResult.values.length === 0) {
-                    throw new Error("Destination account does not exist!");
-                }
-                const toAccountData = toAccountResult.values[0] as Account;
-                const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency, customRates, useCustomRates);
-                const newToBalance = toAccountData.balance + amountInToAccountCurrency;
-                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, tx.toAccountId]);
-            }
-        });
-
-        // Recompute all balances from scratch so totals are always correct,
-        // instead of relying on incremental updates that can drift.
-        // Batched callers opt out and reconcile once themselves.
         if (options.recalculate !== false) {
             await this.recalculateBalances();
         }
@@ -129,64 +127,41 @@ class TransactionService {
 
     // Insert a validated batch in one SQLite transaction, then reconcile once.
     async createTransactionsBatch(txs: Omit<Transaction, 'id'>[]): Promise<string[]> {
-        const ids: string[] = [];
-        await sqliteService.transaction(async (db) => {
-            for (const tx of txs) {
-                const id = crypto.randomUUID();
-                ids.push(id);
+        const settings = await settingsService.getSettings();
+        const accountsResult = await sqliteService.query('SELECT * FROM accounts');
+        const accountById = new Map(((accountsResult.values || []) as Account[]).map(account => [account.id, account]));
+
+        const prepared = txs.map(tx => {
+            const source = accountById.get(tx.accountId);
+            if (!source) throw new Error(`Source account does not exist: ${tx.accountId}`);
+            const destination = tx.type === 'Transfer' && tx.toAccountId ? accountById.get(tx.toAccountId) : null;
+            if (tx.type === 'Transfer' && tx.toAccountId && !destination) {
+                throw new Error(`Destination account does not exist: ${tx.toAccountId}`);
+            }
+            const id = crypto.randomUUID();
+            return {
+                id,
+                values: this.insertValues(id, tx, computeAmounts(tx, source, destination || null, settings)),
+            };
+        });
+
+        await sqliteService.transaction(async db => {
+            for (const row of prepared) {
                 await db.run(
-                    'INSERT INTO transactions (id, amount, currency, categoryId, accountId, toAccountId, date, note, type, fee, receiptPath, hidden, externalId, importBatchId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [id, tx.amount, tx.currency, tx.categoryId || null, tx.accountId, tx.toAccountId || null, tx.date, tx.note || null, tx.type, tx.fee || null, tx.receiptPath || null, tx.hidden ? 1 : 0, tx.externalId || null, tx.importBatchId || null]
+                    `INSERT INTO transactions (${INSERT_COLUMNS}) VALUES (${INSERT_PLACEHOLDERS})`,
+                    row.values
                 );
             }
         });
+
         await this.recalculateBalances();
-        return ids;
+        return prepared.map(row => row.id);
     }
 
-    // Delete transaction and revert account balance atomically
+    // Delete a transaction, clean up its receipt and reconcile balances.
     async deleteTransaction(tx: Transaction) {
-        const { customRates, useCustomRates } = await settingsService.getSettings();
-        await sqliteService.transaction(async (db) => {
-            const accountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.accountId]);
-            if (!accountResult.values || accountResult.values.length === 0) {
-                throw new Error("Source account does not exist!");
-            }
-            const accountData = accountResult.values[0] as Account;
-
-            const amountInAccountCurrency = convertCurrency(tx.amount, tx.currency, accountData.currency, customRates, useCustomRates);
-            const feeInAccountCurrency = tx.fee ? convertCurrency(tx.fee, tx.currency, accountData.currency, customRates, useCustomRates) : 0;
-
-            let newBalance = accountData.balance;
-            if (tx.type === 'Income') {
-                newBalance = accountData.balance - amountInAccountCurrency + feeInAccountCurrency;
-            } else {
-                newBalance = accountData.balance + amountInAccountCurrency + feeInAccountCurrency;
-            }
-
-            // Delete the transaction record
-            await db.run('DELETE FROM transactions WHERE id = ?', [tx.id]);
-
-            // Update the source account balance
-            await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newBalance, tx.accountId]);
-
-            // Handle Transfer destination account revert
-            if (tx.type === 'Transfer' && tx.toAccountId) {
-                const toAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [tx.toAccountId]);
-                if (toAccountResult.values && toAccountResult.values.length > 0) {
-                    const toAccountData = toAccountResult.values[0] as Account;
-                    const amountInToAccountCurrency = convertCurrency(tx.amount, tx.currency, toAccountData.currency, customRates, useCustomRates);
-                    const newToBalance = toAccountData.balance - amountInToAccountCurrency;
-                    await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, tx.toAccountId]);
-                }
-            }
-        });
-
-        // Remove the receipt file now that the transaction is gone (no orphans).
+        await sqliteService.execute('DELETE FROM transactions WHERE id = ?', [tx.id]);
         await receiptService.remove(tx.receiptPath);
-
-        // Recompute all balances from scratch so totals are always correct,
-        // instead of relying on incremental updates that can drift.
         await this.recalculateBalances();
     }
 
@@ -210,126 +185,75 @@ class TransactionService {
         await this.recalculateBalances();
     }
 
+    // Edit keeps externalId/importBatchId; the frozen amounts are recomputed
+    // because an edit is a new agreement, not a historical rewrite.
     async updateTransaction(oldTx: Transaction, newTxData: Omit<Transaction, 'id'>) {
-        const { customRates, useCustomRates } = await settingsService.getSettings();
-        await sqliteService.transaction(async (db) => {
-            // 1. Revert old transaction impact
-            const oldAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [oldTx.accountId]);
-            if (oldAccountResult.values && oldAccountResult.values.length > 0) {
-                const oldAccountData = oldAccountResult.values[0] as Account;
-                const oldAmountInAccountCurrency = convertCurrency(oldTx.amount, oldTx.currency, oldAccountData.currency, customRates, useCustomRates);
-                const oldFeeInAccountCurrency = oldTx.fee ? convertCurrency(oldTx.fee, oldTx.currency, oldAccountData.currency, customRates, useCustomRates) : 0;
+        const settings = await settingsService.getSettings();
 
-                let revertedBalance = oldAccountData.balance;
-                if (oldTx.type === 'Income') {
-                    revertedBalance = oldAccountData.balance - oldAmountInAccountCurrency + oldFeeInAccountCurrency;
-                } else {
-                    revertedBalance = oldAccountData.balance + oldAmountInAccountCurrency + oldFeeInAccountCurrency;
-                }
-                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [revertedBalance, oldTx.accountId]);
+        const source = await this.getAccount(newTxData.accountId);
+        if (!source) throw new Error('Source account does not exist!');
 
-                // Revert destination account if it was a transfer
-                if (oldTx.type === 'Transfer' && oldTx.toAccountId) {
-                    const oldToAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [oldTx.toAccountId]);
-                    if (oldToAccountResult.values && oldToAccountResult.values.length > 0) {
-                        const oldToAccountData = oldToAccountResult.values[0] as Account;
-                        const oldAmountInToAccountCurrency = convertCurrency(oldTx.amount, oldTx.currency, oldToAccountData.currency, customRates, useCustomRates);
-                        const newToBalance = oldToAccountData.balance - oldAmountInToAccountCurrency;
-                        await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [newToBalance, oldTx.toAccountId]);
-                    }
-                }
-            }
+        let destination: Account | null = null;
+        if (newTxData.type === 'Transfer' && newTxData.toAccountId) {
+            destination = await this.getAccount(newTxData.toAccountId);
+            if (!destination) throw new Error('Destination account does not exist!');
+        }
 
-            // 2. Update the transaction record
-            await db.run(
-                'UPDATE transactions SET amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?, note = ?, type = ?, fee = ?, receiptPath = ?, hidden = ? WHERE id = ?',
-                [newTxData.amount, newTxData.currency, newTxData.categoryId || null, newTxData.accountId, newTxData.toAccountId || null, newTxData.date, newTxData.note || null, newTxData.type, newTxData.fee || null, newTxData.receiptPath || null, newTxData.hidden ? 1 : 0, oldTx.id]
-            );
+        const amounts = computeAmounts(newTxData, source, destination, settings);
 
-            // 3. Apply new transaction impact
-            const newAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [newTxData.accountId]);
-            if (newAccountResult.values && newAccountResult.values.length > 0) {
-                // IMPORTANT: Fetch the balance AGAIN because it might have changed in step 1 (if it's the same account)
-                const refreshedAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [newTxData.accountId]);
-                const newAccountData = refreshedAccountResult.values![0] as Account;
-
-                const newAmountInAccountCurrency = convertCurrency(newTxData.amount, newTxData.currency, newAccountData.currency, customRates, useCustomRates);
-                const newFeeInAccountCurrency = newTxData.fee ? convertCurrency(newTxData.fee, newTxData.currency, newAccountData.currency, customRates, useCustomRates) : 0;
-
-                let finalBalance = newAccountData.balance;
-                if (newTxData.type === 'Income') {
-                    finalBalance = newAccountData.balance + newAmountInAccountCurrency - newFeeInAccountCurrency;
-                } else {
-                    finalBalance = newAccountData.balance - newAmountInAccountCurrency - newFeeInAccountCurrency;
-                }
-                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [finalBalance, newTxData.accountId]);
-
-                // Apply to destination account if it's a transfer
-                if (newTxData.type === 'Transfer' && newTxData.toAccountId) {
-                    const newToAccountResult = await db.query('SELECT * FROM accounts WHERE id = ?', [newTxData.toAccountId]);
-                    if (newToAccountResult.values && newToAccountResult.values.length > 0) {
-                        const newToAccountData = newToAccountResult.values[0] as Account;
-                        const newAmountInToAccountCurrency = convertCurrency(newTxData.amount, newTxData.currency, newToAccountData.currency, customRates, useCustomRates);
-                        const finalToBalance = newToAccountData.balance + newAmountInToAccountCurrency;
-                        await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [finalToBalance, newTxData.toAccountId]);
-                    }
-                }
-            }
-        });
+        await sqliteService.execute(
+            `UPDATE transactions SET
+                amount = ?, currency = ?, categoryId = ?, accountId = ?, toAccountId = ?, date = ?,
+                note = ?, type = ?, fee = ?, receiptPath = ?, hidden = ?,
+                accountAmount = ?, accountFee = ?, toAccountAmount = ?, baseAmount = ?, baseCurrency = ?, fxRate = ?
+             WHERE id = ?`,
+            [
+                newTxData.amount,
+                newTxData.currency,
+                newTxData.categoryId || null,
+                newTxData.accountId,
+                newTxData.toAccountId || null,
+                newTxData.date,
+                newTxData.note || null,
+                newTxData.type,
+                newTxData.fee || null,
+                newTxData.receiptPath || null,
+                newTxData.hidden ? 1 : 0,
+                amounts.accountAmount,
+                amounts.accountFee,
+                amounts.toAccountAmount ?? null,
+                amounts.baseAmount,
+                amounts.baseCurrency,
+                amounts.fxRate,
+                oldTx.id,
+            ]
+        );
 
         // If the receipt changed or was removed, delete the old file (no orphans).
         if (oldTx.receiptPath && oldTx.receiptPath !== newTxData.receiptPath) {
             await receiptService.remove(oldTx.receiptPath);
         }
 
-        // Recompute all balances from scratch so totals are always correct,
-        // instead of relying on incremental updates that can drift.
         await this.recalculateBalances();
     }
 
     // Reconcile every account's balance from scratch:
-    // balance = initialBalance + sum of its transactions. Fixes any drift in the
-    // denormalized balance caused by interrupted writes or past bugs.
-    // Single pass over transactions (O(accounts + transactions)) instead of
-    // re-scanning every transaction for every account.
+    // balance = initialBalance + sum of its transactions. Uses frozen amounts
+    // where present, so later exchange-rate edits cannot rewrite history.
     async recalculateBalances() {
-        const { customRates, useCustomRates } = await settingsService.getSettings();
+        const settings = await settingsService.getSettings();
 
         const accountsResult = await sqliteService.query('SELECT * FROM accounts');
         const accounts = (accountsResult.values || []) as Account[];
         const txResult = await sqliteService.query('SELECT * FROM transactions');
         const txs = (txResult.values || []) as Transaction[];
 
-        const currencyById = new Map(accounts.map(acc => [acc.id, acc.currency]));
-        const deltas = new Map<string, number>();
-
-        const addDelta = (accountId: string | undefined, delta: number) => {
-            if (!accountId || !Number.isFinite(delta)) return;
-            deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta);
-        };
-
-        for (const tx of txs) {
-            // Source side (income adds, expense/transfer subtract; fee always subtracts)
-            const sourceCurrency = currencyById.get(tx.accountId);
-            if (sourceCurrency) {
-                const amount = convertCurrency(tx.amount, tx.currency, sourceCurrency, customRates, useCustomRates);
-                const fee = tx.fee ? convertCurrency(tx.fee, tx.currency, sourceCurrency, customRates, useCustomRates) : 0;
-                addDelta(tx.accountId, tx.type === 'Income' ? amount - fee : -(amount + fee));
-            }
-
-            // Transfer destination side (amount added, no fee)
-            if (tx.type === 'Transfer' && tx.toAccountId) {
-                const destCurrency = currencyById.get(tx.toAccountId);
-                if (destCurrency) {
-                    addDelta(tx.toAccountId, convertCurrency(tx.amount, tx.currency, destCurrency, customRates, useCustomRates));
-                }
-            }
-        }
+        const deltas = accountDeltas(txs, accounts, settings);
 
         await sqliteService.transaction(async (db) => {
-            for (const acc of accounts) {
-                const balance = acc.initialBalance + (deltas.get(acc.id) ?? 0);
-                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [balance, acc.id]);
+            for (const account of accounts) {
+                const balance = account.initialBalance + (deltas.get(account.id) ?? 0);
+                await db.run('UPDATE accounts SET balance = ? WHERE id = ?', [balance, account.id]);
             }
         });
 

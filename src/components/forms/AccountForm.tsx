@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { accountService } from '../../services/accountService';
 import { transactionService } from '../../services/transactionService';
-import { convertCurrency } from '../../utils/format';
+import { convert } from '../../utils/money';
 import type { Account, AccountType, Currency } from '../../types';
 
 interface AccountFormProps {
@@ -50,8 +50,8 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSuccess, accounts, accountT
 
                 // Convert stored balances when currency changes so values aren't corrupted.
                 if (currency !== accountToEdit.currency) {
-                    updates.balance = convertCurrency(accountToEdit.balance, accountToEdit.currency, currency);
-                    updates.initialBalance = convertCurrency(accountToEdit.initialBalance, accountToEdit.currency, currency);
+                    updates.balance = convert(accountToEdit.balance, accountToEdit.currency, currency);
+                    updates.initialBalance = convert(accountToEdit.initialBalance, accountToEdit.currency, currency);
                 }
 
                 // No transactions => balance tracks initialBalance; honor the entered value (already in selected currency).

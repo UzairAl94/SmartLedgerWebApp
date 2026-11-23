@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mic, Square, ArrowUpRight, ArrowDownLeft, Plus, Pencil, Eye, EyeOff, Loader2, Info } from 'lucide-react';
-import { formatCurrency, convertCurrency } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { convert } from '../utils/money';
 import { isAmountHidden, MASK } from '../utils/visibility';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
@@ -69,7 +70,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
 
     // Calculate Total Balance
     const totalBalance = accounts.reduce((acc: number, account: Account) => {
-        return acc + convertCurrency(account.balance, account.currency, mainCurrency, settings?.customRates, settings?.useCustomRates);
+        return acc + convert(account.balance, account.currency, mainCurrency, settings);
     }, 0);
 
     // Recent Transactions
@@ -80,11 +81,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onAddTx, onEditTx, onViewTx, onVi
     // Calculate Income and Expenses over the full history
     const incomeTotal = allTransactions
         .filter(t => t.type === 'Income')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+        .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0);
 
     const expenseTotal = allTransactions
         .filter(t => t.type === 'Expense')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+        .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0);
 
     return (
         <div className="flex flex-col gap-8 pb-8">

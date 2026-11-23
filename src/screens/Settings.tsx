@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat, Cloud, Clock, Server, Copy, Check, Power, AlertTriangle } from 'lucide-react';
+import { Globe, Calendar, Bell, Shield, Palette, Download, Lock, KeyRound, RefreshCw, Bot, Mic, Sun, Moon, Monitor, Target, Repeat, Cloud, Clock, Server, Copy, Check, Power, AlertTriangle, Fingerprint } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 import { settingsService } from '../services/settingsService';
 import { backupService } from '../services/backupService';
 import { transactionService } from '../services/transactionService';
 import { secretsService, SECRET_KEYS } from '../services/secretsService';
 import { notificationService } from '../services/notificationService';
+import { biometricService } from '../services/biometricService';
 import { apiServer } from '../services/apiServer';
 import type { ApiServerState } from '../services/apiServer';
 import BottomSheet from '../components/ui/BottomSheet';
@@ -34,6 +36,15 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
     const [showApiToken, setShowApiToken] = useState(false);
     const [apiPort, setApiPort] = useState('8765');
     const [copied, setCopied] = useState<string | null>(null);
+    const [biometricAvailable, setBiometricAvailable] = useState(false);
+    const [passphraseSheet, setPassphraseSheet] = useState<null | { mode: 'set' | 'verify' | 'restore' }>(null);
+    const [passphraseDraft, setPassphraseDraft] = useState('');
+    const [pendingBackup, setPendingBackup] = useState<ArrayBuffer | null>(null);
+    const [verifyLines, setVerifyLines] = useState<string[] | null>(null);
+
+    useEffect(() => {
+        biometricService.isAvailable().then(result => setBiometricAvailable(result.available)).catch(() => {});
+    }, []);
 
     const handleDriveBackup = async () => {
         setDriveBusy(true);
@@ -225,6 +236,101 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
             handleUpdateSettings({ appPin: pin });
         }
         setPinSheet(null);
+    };
+
+    const runVerification = async (buffer: ArrayBuffer, passphrase?: string) => {
+        try {
+            const report = await backupService.verifyBackup(buffer, passphrase);
+            setVerifyLines([
+                `${report.counts.transactions} transactions · ${report.counts.accounts} accounts · ${report.counts.categories} categories`,
+                `format v${report.version} · ${new Date(report.timestamp).toLocaleString()}${report.encrypted ? ' · encrypted' : ''}`,
+                ...report.issues.map(issue => `ISSUE: ${issue}`),
+                ...report.warnings.map(warning => `Warning: ${warning}`),
+            ]);
+        } catch (error) {
+            setVerifyLines([`Verification failed: ${error instanceof Error ? error.message : String(error)}`]);
+        }
+    };
+
+    const handleBackupFile = async (file: File, mode: 'verify' | 'restore') => {
+        const buffer = await file.arrayBuffer();
+
+        if (backupService.isEncrypted(buffer)) {
+            setPendingBackup(buffer);
+            setPassphraseDraft('');
+            setPassphraseSheet({ mode });
+            return;
+        }
+
+        if (mode === 'verify') {
+            await runVerification(buffer);
+            return;
+        }
+
+        if (!confirm('Restore Data? This will replace all current data with the backup file. This cannot be undone.')) return;
+        try {
+            await backupService.restoreBackup(buffer);
+        } catch (error) {
+            alert('Restore failed: ' + (error instanceof Error ? error.message : String(error)));
+        }
+    };
+
+    const handleToggleEncryption = async (enabled: boolean) => {
+        if (!enabled) {
+            await secretsService.removeKey(SECRET_KEYS.backupPassphrase);
+            handleUpdateSettings({ backupEncryptionEnabled: false });
+            return;
+        }
+        const existing = await secretsService.getKey(SECRET_KEYS.backupPassphrase);
+        if (existing) {
+            handleUpdateSettings({ backupEncryptionEnabled: true });
+            return;
+        }
+        setPassphraseDraft('');
+        setPassphraseSheet({ mode: 'set' });
+    };
+
+    const submitPassphrase = async () => {
+        const mode = passphraseSheet?.mode;
+        if (!mode) return;
+
+        if (mode === 'set') {
+            if (passphraseDraft.length < 8) {
+                alert('Use at least 8 characters. If you lose this passphrase the backup cannot be recovered.');
+                return;
+            }
+            await secretsService.setKey(SECRET_KEYS.backupPassphrase, passphraseDraft);
+            handleUpdateSettings({ backupEncryptionEnabled: true });
+            setPassphraseSheet(null);
+            setPassphraseDraft('');
+            return;
+        }
+
+        if (!pendingBackup) return;
+
+        if (mode === 'verify') {
+            await runVerification(pendingBackup, passphraseDraft);
+            setPassphraseSheet(null);
+            setPendingBackup(null);
+            setPassphraseDraft('');
+            return;
+        }
+
+        if (!confirm('Restore Data? This will replace all current data. This cannot be undone.')) {
+            setPassphraseSheet(null);
+            return;
+        }
+
+        try {
+            await backupService.restoreBackup(pendingBackup, passphraseDraft);
+        } catch (error) {
+            alert('Restore failed: ' + (error instanceof Error ? error.message : String(error)));
+            return;
+        } finally {
+            setPassphraseSheet(null);
+            setPendingBackup(null);
+            setPassphraseDraft('');
+        }
     };
 
     if (!settings) return null;
@@ -446,6 +552,28 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             </div>
                         </button>
                     )}
+                    {settings.appPin && biometricAvailable && (
+                        <div className="flex items-center justify-between p-4 border-b border-black/5 last:border-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                    <Fingerprint size={20} />
+                                </div>
+                                <div>
+                                    <span className="block font-semibold text-[15px]">Unlock with fingerprint</span>
+                                    <span className="text-[12px] text-text-muted">Use biometrics instead of typing the PIN</span>
+                                </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={!!settings.biometricUnlockEnabled}
+                                    onChange={(e) => handleUpdateSettings({ biometricUnlockEnabled: e.target.checked })}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
+                        </div>
+                    )}
                 </div>
             </section>
 
@@ -478,6 +606,13 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             className={`w-full border border-black/5 p-3 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-primary/20 outline-none ${keysLocked ? 'bg-bg-primary opacity-60' : 'bg-white'}`}
                         />
                     </div>
+                    {Capacitor.getPlatform() === 'web' && (
+                        <p className="text-[11px] text-warning leading-relaxed flex items-start gap-2">
+                            <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                            In a browser preview, secrets fall back to localStorage and are not protected by the
+                            device keystore. Enter API keys in the Android app.
+                        </p>
+                    )}
                     {keysLocked ? (
                         <button
                             onClick={() => setKeysLocked(false)}
@@ -775,28 +910,53 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                         </div>
                     </button>
 
+                    <div className="flex items-center justify-between p-4 border-b border-black/5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-50 text-amber-600">
+                                <Lock size={20} />
+                            </div>
+                            <div>
+                                <span className="block font-semibold text-[15px]">Encrypt backups</span>
+                                <span className="text-[12px] text-text-muted">Protect exports with a passphrase</span>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!settings.backupEncryptionEnabled}
+                                onChange={(e) => handleToggleEncryption(e.target.checked)}
+                                className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+
+                    {settings.backupEncryptionEnabled && (
+                        <button
+                            onClick={() => {
+                                setPassphraseDraft('');
+                                setPassphraseSheet({ mode: 'set' });
+                            }}
+                            className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5"
+                        >
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-100 text-slate-600">
+                                <KeyRound size={20} />
+                            </div>
+                            <div className="flex-1 text-left">
+                                <span className="block font-semibold text-[15px]">Backup passphrase</span>
+                                <span className="text-[12px] text-text-muted">Required to open the backup elsewhere</span>
+                            </div>
+                        </button>
+                    )}
+
                     <div className="relative">
                         <input
                             type="file"
                             accept="*/*"
                             onChange={async (e) => {
                                 const file = e.target.files?.[0];
-                                if (!file) return;
-
-                                if (confirm('Restore Data? This will replace all current data with the backup file. This cannot be undone.')) {
-                                    const reader = new FileReader();
-                                    reader.onload = async (event) => {
-                                        try {
-                                            // Always read bytes; restore detects ZIP vs JSON from the content.
-                                            await backupService.restoreBackup(event.target?.result as ArrayBuffer);
-                                        } catch (error) {
-                                            alert('Restore failed: ' + (error instanceof Error ? error.message : String(error)));
-                                        }
-                                    };
-                                    reader.readAsArrayBuffer(file);
-                                }
-                                // Reset input
                                 e.target.value = '';
+                                if (file) await handleBackupFile(file, 'restore');
                             }}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                         />
@@ -810,6 +970,47 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
                             </div>
                         </div>
                     </div>
+
+                    <div className="relative">
+                        <input
+                            type="file"
+                            accept="*/*"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                if (file) await handleBackupFile(file, 'verify');
+                            }}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <div className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors border-b border-black/5 last:border-0">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-teal-50 text-teal-600">
+                                <Check size={20} />
+                            </div>
+                            <div className="flex-1 text-left">
+                                <span className="block font-semibold text-[15px]">Verify Backup</span>
+                                <span className="text-[12px] text-text-muted">Check a file without restoring it</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {verifyLines && (
+                        <div className="p-4 border-b border-black/5 bg-bg-primary/60">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">Backup check</span>
+                                <button onClick={() => setVerifyLines(null)} className="text-[12px] font-bold text-primary">Dismiss</button>
+                            </div>
+                            {verifyLines.map((line, index) => (
+                                <p
+                                    key={index}
+                                    className={`text-[11px] font-mono leading-relaxed break-words ${
+                                        line.startsWith('ISSUE') ? 'text-expense' : line.startsWith('Warning') ? 'text-warning' : 'text-text-secondary'
+                                    }`}
+                                >
+                                    {line}
+                                </p>
+                            ))}
+                        </div>
+                    )}
 
                     <button
                         disabled={recomputing}
@@ -904,6 +1105,60 @@ const Settings: React.FC<SettingsProps> = ({ onNavigateCategories, onNavigateBud
             title={pinSheet === 'change' ? 'Change PIN' : 'Set App PIN'}
         >
             <PinSetup key={pinSheet || 'closed'} onComplete={handlePinSaved} />
+        </BottomSheet>
+
+        <BottomSheet
+            isOpen={passphraseSheet !== null}
+            onClose={() => {
+                setPassphraseSheet(null);
+                setPendingBackup(null);
+                setPassphraseDraft('');
+            }}
+            title={
+                passphraseSheet?.mode === 'set'
+                    ? 'Backup passphrase'
+                    : passphraseSheet?.mode === 'verify'
+                        ? 'Unlock backup'
+                        : 'Restore encrypted backup'
+            }
+        >
+            <div className="flex flex-col gap-4">
+                <p className="text-[12px] text-text-muted leading-relaxed">
+                    {passphraseSheet?.mode === 'set'
+                        ? 'Choose at least 8 characters. If you lose this passphrase, encrypted backups cannot be recovered — not even by the app.'
+                        : 'This backup is encrypted. Enter the passphrase that was used when it was created.'}
+                </p>
+                <input
+                    type="password"
+                    autoFocus
+                    value={passphraseDraft}
+                    onChange={(e) => setPassphraseDraft(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full border border-black/5 p-3 rounded-xl text-[14px] font-medium bg-white focus:ring-2 focus:ring-primary/20 outline-none"
+                />
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => {
+                            setPassphraseSheet(null);
+                            setPendingBackup(null);
+                            setPassphraseDraft('');
+                        }}
+                        className="flex-1 py-3 bg-bg-primary text-text-secondary rounded-xl font-bold text-[14px]"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={submitPassphrase}
+                        className="flex-1 py-3 bg-primary text-white rounded-xl font-bold text-[14px]"
+                    >
+                        {passphraseSheet?.mode === 'set'
+                            ? 'Save passphrase'
+                            : passphraseSheet?.mode === 'verify'
+                                ? 'Decrypt & verify'
+                                : 'Decrypt & restore'}
+                    </button>
+                </div>
+            </div>
         </BottomSheet>
         </>
     );

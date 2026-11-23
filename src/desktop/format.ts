@@ -1,12 +1,13 @@
 import type { Currency, UserSettings } from '../types';
-import { convertCurrency, formatCurrency } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { convert as convertMoney } from '../utils/money';
 import type { RangeKey } from './types';
 
 export const fmtMoney = (amount: number, currency: Currency): string =>
     formatCurrency(Number.isFinite(amount) ? amount : 0, currency);
 
 export const convert = (amount: number, from: Currency, to: Currency, settings: UserSettings | null): number =>
-    convertCurrency(amount, from, to, settings?.customRates, settings?.useCustomRates);
+    convertMoney(amount, from, to, settings);
 
 export const isoDay = (date: Date): string =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;

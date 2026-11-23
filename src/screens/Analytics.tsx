@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronDown } from 'lucide-react';
 import type { Transaction, Category, UserSettings } from '../types';
-import { formatCurrency, convertCurrency } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { convert } from '../utils/money';
 import { transactionService } from '../services/transactionService';
 import {
     subDays,
@@ -103,11 +104,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
 
             const income = periodTxs
                 .filter(t => t.type === 'Income')
-                .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+                .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0);
 
             const expense = periodTxs
                 .filter(t => t.type === 'Expense')
-                .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+                .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0);
 
             return {
                 name: label,
@@ -122,13 +123,13 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
     const incomeTotal = useMemo(() =>
         filteredTransactions
             .filter(t => t.type === 'Income')
-            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0),
+            .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0),
         [filteredTransactions, mainCurrency, settings]);
 
     const expenseTotal = useMemo(() =>
         filteredTransactions
             .filter(t => t.type === 'Expense')
-            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0),
+            .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0),
         [filteredTransactions, mainCurrency, settings]);
 
     const categoryData = useMemo(() =>
@@ -137,7 +138,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ categories, settings }) => {
             .map(c => {
                 const total = filteredTransactions
                     .filter(t => t.categoryId === c.id)
-                    .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0); // Normalized to main currency if needed, or keeping raw if single currency
+                    .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0); // Normalized to main currency if needed, or keeping raw if single currency
                 // Note: Ideally category breakdown should also normalize currency if mixed.
                 // Assuming mixed for safety:
                 return { name: c.name, value: total, color: c.color };

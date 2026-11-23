@@ -33,17 +33,17 @@ const getRandom = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)];
 
 export const seedCategoriesIfNeeded = async (provider: IDbProvider) => {
     try {
-        console.log('Seeder: Checking if categories are seeded...');
+        console.info('Seeder: Checking if categories are seeded...');
 
         const checkResult = await provider.query('SELECT value FROM settings WHERE key = ?', ['categories_seeded']);
         const isSeeded = checkResult.values && checkResult.values.length > 0 && checkResult.values[0].value === 'true';
 
         if (isSeeded) {
-            console.log('Seeder: Categories already seeded.');
+            console.info('Seeder: Categories already seeded.');
             return;
         }
 
-        console.log('Seeder: Starting category seeding...');
+        console.info('Seeder: Starting category seeding...');
 
         await provider.transaction(async (db) => {
             // Seed Income Categories
@@ -69,7 +69,7 @@ export const seedCategoriesIfNeeded = async (provider: IDbProvider) => {
             );
         });
 
-        console.log('Seeder: Category seeding complete.');
+        console.info('Seeder: Category seeding complete.');
     } catch (error) {
         console.error('Seeder: Error during category seeding:', error);
         // We don't want to throw and block app initialization, 

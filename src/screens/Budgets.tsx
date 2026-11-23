@@ -3,7 +3,8 @@ import { Plus, Trash2, Target } from 'lucide-react';
 import { setDate, subMonths, startOfDay, isAfter, parseISO } from 'date-fns';
 import { budgetService } from '../services/budgetService';
 import { transactionService } from '../services/transactionService';
-import { formatCurrency, convertCurrency } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { convert } from '../utils/money';
 import BottomSheet from '../components/ui/BottomSheet';
 import type { Budget, Category, Transaction, UserSettings, Currency } from '../types';
 
@@ -42,7 +43,7 @@ const Budgets: React.FC<BudgetsProps> = ({ budgets, categories, settings }) => {
         const spent = transactions
             .filter(t => t.type === 'Expense' && t.categoryId === budget.categoryId)
             .filter(t => isAfter(parseISO(t.date), periodStart))
-            .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, budget.currency, settings?.customRates, settings?.useCustomRates), 0);
+            .reduce((sum, t) => sum + convert(t.amount, t.currency, budget.currency, settings), 0);
         const pct = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
         return { budget, category, spent, pct, over: spent > budget.amount };
     });

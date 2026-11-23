@@ -4,9 +4,11 @@ import type { IDbProvider } from './db/types';
 import { NativeDbProvider } from './db/NativeDbProvider';
 import { WebDbProvider } from './db/WebDbProvider';
 import { seedCategoriesIfNeeded } from './db/seeder';
+import { computeAmounts } from './ledgerMath';
+import type { Account, Currency, Transaction } from '../types';
 
 // Bump this and add a matching `if (version < N)` block when the schema changes.
-const LATEST_SCHEMA_VERSION = 2;
+const LATEST_SCHEMA_VERSION = 3;
 
 class SqliteService {
     private provider: IDbProvider | null = null;
@@ -17,7 +19,7 @@ class SqliteService {
         if (this.isInitialized) return;
         if (this.initPromise) return this.initPromise;
 
-        console.log('SqliteService: Starting initialization...');
+        console.info('SqliteService: Starting initialization...');
         this.initPromise = (async () => {
 
             const platform = Capacitor.getPlatform();
@@ -41,7 +43,7 @@ class SqliteService {
                 await seedCategoriesIfNeeded(this.provider);
 
                 this.initPromise = null;
-                console.log(`SqliteService: Database initialized on ${platform}`);
+                console.info(`SqliteService: Database initialized on ${platform}`);
             } catch (error) {
                 this.isInitialized = false;
                 this.initPromise = null;
@@ -85,7 +87,28 @@ class SqliteService {
             }
         }
 
-        // Future migrations: if (version < 3) { ...ensureColumn / ALTER / CREATE INDEX... }
+        if (version < 3) {
+            // v3: freeze each transaction's conversion so rate edits don't rewrite
+            // history, and add the reconciliation flag.
+            await this.ensureColumn(db, 'transactions', 'accountAmount', 'REAL');
+            await this.ensureColumn(db, 'transactions', 'accountFee', 'REAL');
+            await this.ensureColumn(db, 'transactions', 'toAccountAmount', 'REAL');
+            await this.ensureColumn(db, 'transactions', 'baseAmount', 'REAL');
+            await this.ensureColumn(db, 'transactions', 'baseCurrency', 'TEXT');
+            await this.ensureColumn(db, 'transactions', 'fxRate', 'REAL');
+            await this.ensureColumn(db, 'transactions', 'cleared', 'INTEGER NOT NULL DEFAULT 0');
+            try {
+                await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_cleared ON transactions(cleared);');
+            } catch (error) {
+                console.warn('SqliteService: could not create cleared index:', error);
+            }
+
+            // One-time snapshot: existing rows are frozen with the rates in effect
+            // right now. After this, changing a rate only affects new entries.
+            await this.backfillFrozenAmounts(db);
+        }
+
+        // Future migrations: if (version < 4) { ...ensureColumn / ALTER / CREATE INDEX... }
 
         // 3. Persist the new version. Non-fatal if it fails — every migration
         //    above is idempotent, so it can safely re-run on the next launch.
@@ -118,6 +141,69 @@ class SqliteService {
     private async ensureColumn(db: SQLiteDBConnection, table: string, column: string, definition: string) {
         if (await this.hasColumn(db, table, column)) return;
         await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+
+    /**
+     * Freeze the conversion for every existing transaction using the rates in
+     * effect right now. Runs once, during the v3 migration. Rows that already
+     * have a frozen amount are skipped, so this is safe to re-run.
+     */
+    private async backfillFrozenAmounts(db: SQLiteDBConnection) {
+        const settingsResult = await db.query('SELECT value FROM settings WHERE key = ?', ['user_preferences']);
+        let stored: Record<string, unknown> = {};
+        const raw = settingsResult.values?.[0]?.value;
+        if (typeof raw === 'string') {
+            try {
+                stored = JSON.parse(raw) as Record<string, unknown>;
+            } catch {
+                stored = {};
+            }
+        }
+        const settings = {
+            mainCurrency: (stored.mainCurrency as Currency) || 'PKR',
+            useCustomRates: stored.useCustomRates === true,
+            customRates: (stored.customRates as Record<string, number>) || {},
+        };
+
+        const accountsResult = await db.query('SELECT * FROM accounts');
+        const accounts = (accountsResult.values || []) as Account[];
+        const accountById = new Map(accounts.map(account => [account.id, account]));
+
+        const txResult = await db.query('SELECT * FROM transactions');
+        const transactions = (txResult.values || []) as Transaction[];
+
+        const statements: Array<{ statement: string; values: (string | number | null)[] }> = [];
+        for (const tx of transactions) {
+            if (tx.accountAmount !== undefined && tx.accountAmount !== null) continue;
+            const source = accountById.get(tx.accountId);
+            if (!source) continue;
+            const destination = tx.type === 'Transfer' && tx.toAccountId
+                ? accountById.get(tx.toAccountId) || null
+                : null;
+            const amounts = computeAmounts(tx, source, destination, settings);
+            statements.push({
+                statement: `UPDATE transactions SET accountAmount = ?, accountFee = ?, toAccountAmount = ?,
+                            baseAmount = ?, baseCurrency = ?, fxRate = ? WHERE id = ?`,
+                values: [
+                    amounts.accountAmount,
+                    amounts.accountFee,
+                    amounts.toAccountAmount ?? null,
+                    amounts.baseAmount,
+                    amounts.baseCurrency,
+                    amounts.fxRate,
+                    tx.id,
+                ],
+            });
+        }
+
+        if (statements.length === 0) return;
+        try {
+            await db.executeSet(statements, true);
+            console.info(`SqliteService: froze conversion for ${statements.length} existing transaction(s).`);
+        } catch (error) {
+            // The app still works because recalculation falls back to live rates.
+            console.warn('SqliteService: could not backfill frozen amounts:', error);
+        }
     }
 
     private async createSchema() {
@@ -165,6 +251,13 @@ class SqliteService {
                 hidden INTEGER NOT NULL DEFAULT 0,
                 externalId TEXT,
                 importBatchId TEXT,
+                accountAmount REAL,
+                accountFee REAL,
+                toAccountAmount REAL,
+                baseAmount REAL,
+                baseCurrency TEXT,
+                fxRate REAL,
+                cleared INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(accountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(toAccountId) REFERENCES accounts(id) ON DELETE CASCADE,
                 FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL

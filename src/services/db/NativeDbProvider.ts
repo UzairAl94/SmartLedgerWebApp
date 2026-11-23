@@ -18,7 +18,7 @@ export class NativeDbProvider implements IDbProvider {
         if (this.isInitialized) return;
 
         const platform = Capacitor.getPlatform();
-        console.log('NativeDbProvider: Initializing on platform:', platform);
+        console.info('NativeDbProvider: Initializing on platform:', platform);
 
         try {
             // For web platform, init the web store
@@ -27,10 +27,10 @@ export class NativeDbProvider implements IDbProvider {
             }
 
             const ret = await this.sqlite.checkConnectionsConsistency();
-            console.log('NativeDbProvider: Connection consistency check:', ret);
+            console.info('NativeDbProvider: Connection consistency check:', ret);
 
             const isConn = (await this.sqlite.isConnection(this.DB_NAME, false)).result;
-            console.log('NativeDbProvider: Is connection exists:', isConn);
+            console.info('NativeDbProvider: Is connection exists:', isConn);
 
             if (ret.result && isConn) {
                 this.db = await this.sqlite.retrieveConnection(this.DB_NAME, false);
@@ -42,7 +42,7 @@ export class NativeDbProvider implements IDbProvider {
             await this.db!.execute('PRAGMA foreign_keys = ON;');
             await this.createSchema(this.db!);
             this.isInitialized = true;
-            console.log('NativeDbProvider: Successfully initialized');
+            console.info('NativeDbProvider: Successfully initialized');
         } catch (error) {
             console.error('NativeDbProvider: Initialization failed:', error);
             throw error;

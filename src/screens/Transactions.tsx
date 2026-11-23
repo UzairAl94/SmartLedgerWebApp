@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Pencil, ChevronDown, Calendar, Filter, SlidersHorizontal } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
-import { formatCurrency, convertCurrency } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { convert } from '../utils/money';
 import { isAmountHidden, MASK } from '../utils/visibility';
 import type { Transaction, Category, Account, UserSettings } from '../types';
 import { isToday, isYesterday, format, subDays, isAfter, parseISO } from 'date-fns';
@@ -84,11 +85,11 @@ const Transactions: React.FC<TransactionsProps> = ({ categories, accounts, accou
 
     const incomeTotal = finalTransactions
         .filter(t => t.type === 'Income')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+        .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0);
 
     const expenseTotal = finalTransactions
         .filter(t => t.type === 'Expense')
-        .reduce((sum, t) => sum + convertCurrency(t.amount, t.currency, mainCurrency, settings?.customRates, settings?.useCustomRates), 0);
+        .reduce((sum, t) => sum + convert(t.amount, t.currency, mainCurrency, settings), 0);
 
     return (
         <div className="flex flex-col gap-4 pb-8 h-full">

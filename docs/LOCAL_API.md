@@ -113,13 +113,26 @@ curl -s -X POST http://192.168.1.23:8765/api/import/transactions \
 
 ## AI import skill
 
-The `smart-ledger-import` skill (installed at `~/.agents/skills/smart-ledger-import/`)
-turns uploaded statements into an approval list, then calls this API. Ask:
+The `smart-ledger-import` skill turns uploaded statements (PDF, CSV, screenshots) or pasted notes into
+ledger rows. It is installed at `~/.agents/skills/smart-ledger-import/` and its source lives in
+`skills/smart-ledger-import/` in this repo. Ask:
 
 > "Import this statement into Smart Ledger"
 
-and paste the connection JSON when asked. The skill lists every proposed transaction first,
-waits for approval, dry-runs the batch, writes it, and offers an undo.
+What it does, in order:
+
+1. Connects from `.smartledger-api.json`, environment variables, or the connection JSON you paste.
+2. Snapshots accounts, categories, settings and balances before touching anything.
+3. Reads every page, keeping a source reference for each row, and reconciles the statement itself
+   (`opening + credits − debits = closing`) when those figures are present.
+4. Shows a numbered approval list with per-account totals, duplicate flags and unresolved decisions, then
+   **waits**.
+5. Dry-runs the batch, writes it in chunks after approval, and verifies the result.
+6. Proves the balances with `verify_balances.py` (bundled with the skill): expected per-account deltas are
+   computed from the written rows using the server's own rates, then compared against `/api/balances`.
+   Any mismatch fails the run and offers an undo instead of reporting success.
+
+The same skill can be used read-only to check balances or answer questions about the ledger.
 
 ## Security notes
 
